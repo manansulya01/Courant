@@ -1,0 +1,2 @@
+import {NextResponse} from "next/server";
+export async function POST(request:Request){const body=await request.json().catch(()=>({}));const transcript=typeof body.transcript==="string"?body.transcript:"";return NextResponse.json({reply:transcript?"Nice start. Now say that again with one clear pause before your main point.":"Take a breath and begin when you’re ready.",feedback:{clarity:82,confidence:78,pace:74}});}
