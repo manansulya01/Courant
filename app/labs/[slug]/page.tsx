@@ -22,6 +22,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
   const [imageName, setImageName] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("Your coach is ready. Choose a way to practise.");
+  const [saved, setSaved] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -88,7 +89,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       setImage(data); setImageName(file.name); setError("");
     } catch { setError("That picture couldn't be loaded. Try another image."); }
   }
-  function begin() { setHistory([{ role: "assistant", content: scenario.opening }]); void speak(scenario.opening); setNotice("Conversation started. Speak, type, or show Courant something."); }
+  async function saveSession() {\n    if (history.filter(t => t.role === "user").length === 0 || saved) return;\n    setBusy(true); setError("");\n    try {\n      const res = await fetch("/api/learning/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lesson: scenario.title, scenario: scenario.prompt, skill: slug === "storytelling" ? "confidence" : slug === "school-presentation" ? "presentation" : "conversation", minutes: Math.min(180, Math.max(1, Math.ceil(history.filter(t => t.role === "user").length * 1.5)), completed: true }) });\n      const data = await res.json(); if (!res.ok) throw new Error(data.error || "Sign in to save your progress.");\n      setSaved(true); setNotice("Session saved to your learning journal.");\n    } catch (e) { setError(e instanceof Error ? e.message : "Could not save session."); } finally { setBusy(false); }\n  }\n  function begin() { setHistory([{ role: "assistant", content: scenario.opening }]); setSaved(false); void speak(scenario.opening); setNotice("Conversation started. Speak, type, or show Courant something."); }
   function reset() { if (recording) stopRecording(); setHistory([]); setDraft(""); setImage(""); setImageName(""); setError(""); setNotice("Your practice is reset. Start whenever you're ready."); if (audioRef.current) audioRef.current.pause(); }
 
   return <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -120,10 +121,10 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
           <button type="button" disabled={busy} onClick={() => imageInput.current?.click()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:opacity-40">Show a picture +</button>
           <input ref={imageInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { void pickImage(e.target.files?.[0]); e.currentTarget.value = ""; }} aria-label="Choose or take a picture" />
           <button type="button" disabled={busy || (!draft.trim() && !image)} onClick={() => void send()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:cursor-not-allowed disabled:opacity-40">Send →</button>
-          <button type="button" disabled={busy} onClick={reset} className="ml-auto px-2 py-3 text-xs text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-40">Reset</button>
+          <button type="button" disabled={busy || !history.some(t => t.role === "user") || saved} onClick={() => void saveSession()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold disabled:opacity-40">{saved ? "Saved ✓" : "Save session"}</button>\n          <button type="button" disabled={busy} onClick={reset} className="ml-auto px-2 py-3 text-xs text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-40">Reset</button>
         </div>
         <audio ref={audioRef} className="mt-3 hidden" controls />
-        <p className="mt-4 text-[10px] leading-5 text-[var(--muted)]">AI voice, audio transcription, and image understanding require an OpenAI API key configured on the server. Your API key is never sent to this page. This prototype does not save your session.</p>
+        <p className="mt-4 text-[10px] leading-5 text-[var(--muted)]">AI voice, audio transcription, and image understanding require an OpenAI API key configured on the server. Your API key is never sent to this page. Save a session to store lesson activity in your account. Conversation transcripts and recordings are not saved.</p>
       </section>
     </div>
   </main>;
