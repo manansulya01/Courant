@@ -1,33 +1,31 @@
 # Courant
 
-Courant is a speaking-practice and communication-coaching app built with Next.js, React, TypeScript and Tailwind CSS. Its visual direction is intentionally quiet and editorial: warm neutrals, deep botanical green, generous spacing and accessible controls.
+Courant is a calm, touch-friendly speaking and communication practice app built with Next.js, React, TypeScript and Tailwind CSS.
 
-## Local setup
+## Run locally
 
 1. Install Node.js 22 LTS.
 2. Run `npm install`.
 3. Copy `.env.example` to `.env.local`.
-4. Create a MongoDB Atlas cluster and database user.
-5. Allow your development IP in Atlas Network Access, then copy the driver connection string into `MONGODB_URI`. Replace the placeholders and URL-encode special characters in the password.
-6. Set `MONGODB_DB=courant`.
-7. Run `npm run dev` and open `http://localhost:3000`.
+4. Create a MongoDB Atlas cluster and database user; set `MONGODB_URI` and `MONGODB_DB=courant`.
+5. Add an OpenAI API key to `OPENAI_API_KEY` to enable AI conversation, image understanding, audio transcription and spoken replies. The key stays on the server and must never be prefixed with `NEXT_PUBLIC_`.
+6. Run `npm run dev` and open `http://localhost:3000`.
 
-Never commit `.env.local` or expose `MONGODB_URI` to browser code. Import `lib/mongodb.ts` only from server code.
+## AI learning room
 
-## Routes
+- `/labs` — lesson/scenario library
+- `/labs/[slug]` — responsive AI tutor room for conversation practice
+- `POST /api/tutor` — conversational tutoring with optional image input
+- `POST /api/tutor/transcribe` — converts recorded speech to text
+- `POST /api/tutor/speech` — returns a spoken audio reply
+- `POST /api/coach` — legacy heuristic demo feedback endpoint
 
-- `/` — public site
-- `/login` — demo sign-in screen, not authenticated
-- `/dashboard` — student dashboard with sample data
-- `/labs` and `/labs/[slug]` — scenario library and speaking room
-- `/teacher` — teacher workspace with sample data
-- `/creator` — Creator Studio UI
-- `/api/coach` — heuristic demo feedback endpoint
+The learning room uses an OpenAI chat model for age-appropriate conversational coaching, an audio transcription model to hear recorded answers, a speech model for spoken replies, and a vision-capable chat model to discuss images. iPad users can record audio through the browser's MediaRecorder API and use the image picker/camera when supported. HTTPS and user permission are required for microphone/camera access in deployed environments.
 
-## Current limitations
+## Current limitations and responsible use
 
-Sign-in does not authenticate users. Dashboard and teacher metrics, recordings and creator projects are illustrative data. The MongoDB connection helper exists, but current UI flows are not yet persisting data. Speech recognition and synthesis depend on browser support. Coach feedback is heuristic, not AI-generated or validated pronunciation analysis. The school enquiry form does not send information. Audio is not stored.
+The live AI routes need a valid provider API key and have not been validated in production yet. API usage may incur provider charges. The prototype does not persist chat sessions or recordings to MongoDB. Sign-in and student/teacher dashboards remain demo screens; they are not authenticated or connected to saved student records. Browser/media support varies by iPadOS version. Obtain appropriate school/guardian consent before deploying for children, avoid collecting personal details, and implement retention/deletion controls and role-based access before a real classroom rollout.
 
 ## Production work remaining
 
-Implement secure authentication and role-aware authorization; persist sessions, transcripts, scores, classes, assignments and projects in MongoDB; integrate an AI coach and reliable speech provider; add privacy, consent, retention and deletion controls; and complete automated tests, accessibility checks and deployment verification.
+Add secure authentication and role-based authorization, persist consented lesson progress in MongoDB, add provider rate limits and abuse protection, test supported iPadOS/Safari versions, add accessibility and privacy review, and verify deployment end to end.
