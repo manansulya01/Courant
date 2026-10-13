@@ -45,7 +45,8 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, scenario: scenario.title, history, image: image || undefined }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "The tutor could not reply.");
-      setHistory(old => [...old, userTurn, { role: "assistant", content: data.reply }].slice(-24));
+      const assistantTurn: ChatTurn = { role: "assistant", content: data.reply };
+      setHistory(old => [...old, userTurn, assistantTurn].slice(-24));
       setDraft(""); setImage(""); setImageName(""); setNotice("Courant replied. Listen, then keep the conversation going.");
       await speak(data.reply);
     } catch (e) { setError(e instanceof Error ? e.message : "Could not reach your tutor."); setNotice("Ready when you are."); }
