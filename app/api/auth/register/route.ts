@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     } else if (requestedRole !== "student") return NextResponse.json({ error: "Choose a supported account type." }, { status: 400 });
     const db = await getDatabase();
     const users = db.collection("users");
+    await users.createIndex({ email: 1 }, { unique: true, name: "unique_user_email" });
     const existing = await users.findOne({ email }, { projection: { _id: 1 } });
     if (existing) return NextResponse.json({ error: "An account with that email already exists." }, { status: 409 });
     const now = new Date();
