@@ -89,7 +89,19 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       setImage(data); setImageName(file.name); setError("");
     } catch { setError("That picture couldn't be loaded. Try another image."); }
   }
-  async function saveSession() {\n    if (history.filter(t => t.role === "user").length === 0 || saved) return;\n    setBusy(true); setError("");\n    try {\n      const res = await fetch("/api/learning/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lesson: scenario.title, scenario: scenario.prompt, skill: slug === "storytelling" ? "confidence" : slug === "school-presentation" ? "presentation" : "conversation", minutes: Math.min(180, Math.max(1, Math.ceil(history.filter(t => t.role === "user").length * 1.5)), completed: true }) });\n      const data = await res.json(); if (!res.ok) throw new Error(data.error || "Sign in to save your progress.");\n      setSaved(true); setNotice("Session saved to your learning journal.");\n    } catch (e) { setError(e instanceof Error ? e.message : "Could not save session."); } finally { setBusy(false); }\n  }\n  function begin() { setHistory([{ role: "assistant", content: scenario.opening }]); setSaved(false); void speak(scenario.opening); setNotice("Conversation started. Speak, type, or show Courant something."); }
+  async function saveSession() {
+    if (history.filter(t => t.role === "user").length === 0 || saved) return;
+    setBusy(true); setError("");
+    try {
+      const minutes = Math.min(180, Math.max(1, Math.ceil(history.filter(t => t.role === "user").length * 1.5)));
+      const res = await fetch("/api/learning/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lesson: scenario.title, scenario: scenario.prompt, skill: slug === "storytelling" ? "confidence" : slug === "school-presentation" ? "presentation" : "conversation", minutes, completed: true }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sign in to save your progress.");
+      setSaved(true); setNotice("Session saved to your learning journal.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save session."); }
+    finally { setBusy(false); }
+  }
+  function begin() { setHistory([{ role: "assistant", content: scenario.opening }]); setSaved(false); void speak(scenario.opening); setNotice("Conversation started. Speak, type, or show Courant something."); }
   function reset() { if (recording) stopRecording(); setHistory([]); setDraft(""); setImage(""); setImageName(""); setError(""); setNotice("Your practice is reset. Start whenever you're ready."); if (audioRef.current) audioRef.current.pause(); }
 
   return <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
