@@ -27,7 +27,7 @@ export async function checkRateLimit(
   const resetAt = new Date((bucket + 1) * windowSeconds * 1000);
   const id = `${scope}:${identity}:${bucket}`;
   const db = await getDatabase();
-  const counters = db.collection("rateLimits");
+  const counters = db.collection<{ _id: string; count: number; expiresAt: Date; createdAt: Date }>("rateLimits");
   await counters.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: "rate_limit_expiry" });
   const result = await counters.findOneAndUpdate(
     { _id: id },
