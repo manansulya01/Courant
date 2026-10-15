@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getDatabase } from "@/lib/mongodb";
 import { hashPassword, safeUser, setSession, type Role } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try {
+    const rate = await checkRateLimit(request, "auth-register", 5, 60);
+    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
+  }
   try {
     const body = await request.json();
     const name = typeof body.name === "string" ? body.name.trim().slice(0, 80) : "";
