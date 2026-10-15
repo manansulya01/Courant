@@ -24,6 +24,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `POST /api/tutor` — conversational tutoring with optional image input and recent saved learning context
 - `POST /api/tutor/transcribe` — converts recorded speech to text
 - `POST /api/tutor/speech` — returns a spoken audio reply
+- `GET /api/health` — reports database readiness and whether server-side AI/auth configuration is present
 - `/api/learning/progress` — save/read authenticated learner progress
 - `/api/portfolio` — authenticated portfolio CRUD
 - `/api/teacher` — teacher/admin class and assignment management
@@ -36,4 +37,6 @@ The application uses MongoDB collections for users, learning progress, classes, 
 
 This repository includes working implementation foundations, but passing a code commit or CI build is not a substitute for security review or a deployed end-to-end test. Configure MongoDB, `AUTH_SECRET`, teacher invitations, and the OpenAI key before trying account or AI flows. Browser media support varies by iPadOS/Safari version; microphone/camera access requires user permission and HTTPS in production.
 
-Before enrolling real students, add and test rate limiting and abuse controls, password reset and account recovery, verified email, account deletion and data export, retention/deletion policies, CSRF/origin protections for state-changing routes, teacher/student membership and assignment-submission workflows, monitoring/backups, and a privacy/accessibility/child-safety review appropriate to the jurisdictions and schools involved. AI feedback should not be presented as a validated pronunciation or educational assessment unless separately validated.
+State-changing API routes now check request origin, and high-cost/authenticated write endpoints use MongoDB-backed rate-limit buckets. Baseline browser security headers are applied by middleware. The rate limiter depends on MongoDB being available and should be validated behind the actual production proxy before launch.
+
+Still required before enrolling real students: password reset and account recovery, verified email, account deletion and data export, retention/deletion policies, assignment submissions and teacher review, production monitoring/backups and restore drills, and a privacy/accessibility/child-safety review appropriate to the jurisdictions and schools involved. Add automated integration tests against a staging MongoDB deployment and test microphone/camera permissions on supported iPadOS/Safari versions. Do not treat heuristic feedback scores as validated educational or pronunciation assessments. AI feedback should not be presented as a validated pronunciation or educational assessment unless separately validated.
