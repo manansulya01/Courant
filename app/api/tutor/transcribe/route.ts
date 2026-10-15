@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, isSameOrigin } from "@/lib/security";
 export const runtime = "nodejs";
 export const maxDuration = 45;
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try {
+    const rate = await checkRateLimit(request, "transcribe", 15, 60);
+    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
+  }
   const key = process.env.OPENAI_API_KEY;
   if (!key) return NextResponse.json({ error: "Audio transcription needs OPENAI_API_KEY in the server environment." }, { status: 503 });
   try {
