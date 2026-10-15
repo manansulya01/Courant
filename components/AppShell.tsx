@@ -10,6 +10,7 @@ const navigation = [
   {label:"My progress",href:"/dashboard#progress",number:"04"},
   {label:"Recordings",href:"/dashboard#recordings",number:"05"},
   {label:"Creator Studio",href:"/creator",number:"06"},
+  {label:"Account settings",href:"/settings",number:"07"},
 ];
 
 export default function AppShell({children}:{children:React.ReactNode}) {
