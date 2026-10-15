@@ -19,8 +19,9 @@ export async function checkRateLimit(
   limit: number,
   windowSeconds = 60,
 ): Promise<{ allowed: boolean; retryAfter?: number }> {
+  // Prefer the proxy-provided address and use the rightmost forwarded hop to avoid trusting a client-supplied leftmost value.
   const forwarded = request.headers.get("x-forwarded-for");
-  const address = forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+  const address = request.headers.get("x-real-ip")?.trim() || forwarded?.split(",").map((part) => part.trim()).filter(Boolean).at(-1) || "unknown";
   const identity = createHash("sha256").update(address).digest("hex").slice(0, 32);
   const now = new Date();
   const bucket = Math.floor(now.getTime() / (windowSeconds * 1000));
