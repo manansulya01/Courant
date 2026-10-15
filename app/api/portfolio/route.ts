@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -12,6 +13,13 @@ export async function GET() {
   } catch { return NextResponse.json({ error: "Could not load portfolio." }, { status: 503 }); }
 }
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try {
+    const rate = await checkRateLimit(request, "portfolio-write", 40, 60);
+    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
+  }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to save portfolio work." }, { status: 401 });
   try {
@@ -28,6 +36,13 @@ export async function POST(request: Request) {
   } catch { return NextResponse.json({ error: "Could not save this project." }, { status:503 }); }
 }
 export async function PATCH(request: Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try {
+    const rate = await checkRateLimit(request, "portfolio-write", 40, 60);
+    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
+  }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to update portfolio work." }, { status: 401 });
   try {
@@ -44,6 +59,13 @@ export async function PATCH(request: Request) {
   } catch { return NextResponse.json({ error: "Could not update project." }, { status:503 }); }
 }
 export async function DELETE(request: Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try {
+    const rate = await checkRateLimit(request, "portfolio-write", 40, 60);
+    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
+  }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to delete portfolio work." }, { status:401 });
   try {
