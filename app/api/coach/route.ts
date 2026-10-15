@@ -1,5 +1,13 @@
 import {NextResponse} from "next/server";
+import { checkRateLimit, isSameOrigin } from "@/lib/security";
 export async function POST(request:Request){
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try {
+    const rate = await checkRateLimit(request, "coach", 30, 60);
+    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
+  }
  const body=await request.json().catch(()=>({}));
  const transcript=typeof body.transcript==="string"?body.transcript.trim():"";
  if(!transcript)return NextResponse.json({error:"A transcript is required."},{status:400});
