@@ -13,14 +13,15 @@ export async function GET() {
   } catch {
     database = "error";
   }
-  const ready = database === "ok";
+  const authConfigured = Boolean(process.env.AUTH_SECRET && process.env.AUTH_SECRET.length >= 32);
+  const ready = database === "ok" && authConfigured;
   return NextResponse.json(
     {
       status: ready ? "ok" : "degraded",
       checks: {
         database,
         aiConfigured: Boolean(process.env.OPENAI_API_KEY),
-        authConfigured: Boolean(process.env.AUTH_SECRET && process.env.AUTH_SECRET.length >= 32),
+        authConfigured,
       },
       latencyMs: Date.now() - started,
       timestamp: new Date().toISOString(),
