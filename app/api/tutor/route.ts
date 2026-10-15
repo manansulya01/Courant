@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 type Turn = { role: "user" | "assistant"; content: string };
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try {
+    const rate = await checkRateLimit(request, "tutor", 30, 60);
+    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
+  }
   const key = process.env.OPENAI_API_KEY;
   if (!key) return NextResponse.json({ error: "Courant AI is not connected yet. Add OPENAI_API_KEY to the server environment to enable the AI tutor." }, { status: 503 });
   try {
