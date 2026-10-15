@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
     const tokenHash = createHash("sha256").update(token).digest("hex");
     const db = await getDatabase();
-    const record = await db.collection("passwordResetTokens").findOne({ tokenHash, usedAt: null, expiresAt: { $gt: new Date() } });
+    const record = await db.collection("passwordResetTokens").findOneAndDelete({ tokenHash, usedAt: null, expiresAt: { $gt: new Date() } });
     if (!record || !ObjectId.isValid(record.userId)) return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
     const passwordHash = await hashPassword(password);
     const result = await db.collection("users").updateOne({ _id: new ObjectId(record.userId), status: "active" }, { $set: { passwordHash, updatedAt: new Date(), passwordChangedAt: new Date() } });
