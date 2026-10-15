@@ -54,13 +54,15 @@ export async function DELETE(request: Request) {
     const db = await getDatabase();
     const ownedClasses = await db.collection("classes").find({ teacherId: user.id }, { projection: { _id: 1 } }).toArray();
     const ownedClassIds = ownedClasses.map((item) => item._id.toString());
+    const ownedAssignments = await db.collection("assignments").find({ $or: [{ teacherId: user.id }, { classId: { $in: ownedClassIds } }] }, { projection: { _id: 1 } }).toArray();
+    const ownedAssignmentIds = ownedAssignments.map((item) => item._id.toString());
     await Promise.all([
       db.collection("learningProgress").deleteMany({ userId: user.id }),
       db.collection("portfolioItems").deleteMany({ userId: user.id }),
-      db.collection("assignmentSubmissions").deleteMany({ userId: user.id }),
+      db.collection("assignmentSubmissions").deleteMany({ $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }),
       db.collection("classes").updateMany({ studentIds: user.id }, { $pull: { studentIds: user.id }, $set: { updatedAt: new Date() } }),
       db.collection("classes").deleteMany({ teacherId: user.id }),
-      db.collection("assignments").deleteMany({ $or: [{ teacherId: user.id }, { classId: { $in: ownedClassIds } }] }),
+      db.collection("assignments").deleteMany({ _id: { $in: ownedAssignments.map((item) => item._id) } }),
     ]);
     await db.collection("users").deleteOne({ _id: new ObjectId(user.id) });
     const response = NextResponse.json({ ok: true });
