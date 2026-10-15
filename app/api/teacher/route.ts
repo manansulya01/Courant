@@ -25,6 +25,11 @@ export async function GET() {
   } catch { return NextResponse.json({error:"Could not load teacher workspace."},{status:503}); }
 }
 export async function POST(request:Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({error:"Request origin was not accepted."},{status:403});
+  try {
+    const rate=await checkRateLimit(request,"teacher-write",40,60);
+    if(!rate.allowed) return NextResponse.json({error:"Too many requests. Please wait before trying again."},{status:429,headers:{"Retry-After":String(rate.retryAfter||60)}});
+  } catch { return NextResponse.json({error:"Request protection is temporarily unavailable."},{status:503}); }
   const access=await teacher(); if ("error" in access) return access.error;
   try {
     const body=await request.json();
@@ -55,6 +60,11 @@ export async function POST(request:Request) {
   } catch { return NextResponse.json({error:"Could not save teacher workspace changes."},{status:503}); }
 }
 export async function DELETE(request:Request) {
+  if (!isSameOrigin(request)) return NextResponse.json({error:"Request origin was not accepted."},{status:403});
+  try {
+    const rate=await checkRateLimit(request,"teacher-delete",40,60);
+    if(!rate.allowed) return NextResponse.json({error:"Too many requests. Please wait before trying again."},{status:429,headers:{"Retry-After":String(rate.retryAfter||60)}});
+  } catch { return NextResponse.json({error:"Request protection is temporarily unavailable."},{status:503}); }
   const access=await teacher(); if ("error" in access) return access.error;
   try {
     const body=await request.json();
