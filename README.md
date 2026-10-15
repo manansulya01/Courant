@@ -21,6 +21,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `/dashboard` — learner progress, class membership, assignments, and saved sessions
 - `/teacher` — teacher-only class and assignment management
 - `/creator` — private learner portfolio editor
+- `/forgot-password` and `/reset-password` — one-time password recovery (requires Resend configuration)
 - `/settings` — personal data export and account deletion
 - `/teacher/review` — teacher feedback and optional scoring for submitted work
 - `POST /api/tutor` — conversational tutoring with optional image input and recent saved learning context
@@ -44,3 +45,8 @@ This repository includes working implementation foundations, but passing a code 
 State-changing API routes check request origin, and high-cost/authenticated write endpoints use MongoDB-backed rate-limit buckets. Baseline browser security headers are applied by the Next.js proxy entry point. The rate limiter depends on MongoDB being available and should be validated behind the actual production proxy before launch.
 
 Still required before enrolling real students: password reset and account recovery, verified email, account deletion and data export, retention/deletion policies, assignment submissions and teacher review, production monitoring/backups and restore drills, and a privacy/accessibility/child-safety review appropriate to the jurisdictions and schools involved. Add automated integration tests against a staging MongoDB deployment and test microphone/camera permissions on supported iPadOS/Safari versions. Do not treat heuristic feedback scores as validated educational or pronunciation assessments. AI feedback should not be presented as a validated pronunciation or educational assessment unless separately validated.
+
+
+### Password recovery email
+
+Password recovery is enabled when `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verified sender in Resend), and `APP_URL` (the canonical HTTPS application origin in production) are configured. Reset links expire after 30 minutes and are single-use. Without email configuration, the request endpoint intentionally responds with a generic message and does not send a link.
