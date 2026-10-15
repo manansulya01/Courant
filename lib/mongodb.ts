@@ -21,14 +21,14 @@ function getClientPromise() {
 
   if (process.env.NODE_ENV === "development") {
     if (!global._mongoClientPromise) {
-      const client = new MongoClient(uri);
+      const client = new MongoClient(uri, { maxPoolSize: 10, minPoolSize: 0, maxIdleTimeMS: 60_000, serverSelectionTimeoutMS: 5_000 });
       global._mongoClientPromise = client.connect();
     }
     return global._mongoClientPromise;
   }
 
   if (!clientPromise) {
-    clientPromise = new MongoClient(uri).connect();
+    clientPromise = new MongoClient(uri, { maxPoolSize: 10, minPoolSize: 0, maxIdleTimeMS: 60_000, serverSelectionTimeoutMS: 5_000 }).connect();
   }
   return clientPromise;
 }
