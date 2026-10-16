@@ -25,7 +25,9 @@ async function check(path, expectedStatus, init) {
 }
 
 await waitForServer();
-await check("/", 200);
+const home = await check("/", 200);
+if (home.headers.get("x-frame-options") !== "DENY") throw new Error("Missing X-Frame-Options security header.");
+if (home.headers.get("x-content-type-options") !== "nosniff") throw new Error("Missing X-Content-Type-Options security header.");
 await check("/labs", 200);
 await check("/labs/confident-introduction", 200);
 await check("/api/tutor", 405);
@@ -34,4 +36,24 @@ await check("/api/tutor", 503, {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ message: "hello", scenario: "A confident introduction", history: [] }),
 });
+await check("/api/tutor/speech", 503, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text: "Hello there." }),
+});
+await check("/api/tutor/transcribe", 503, { method: "POST" });
+await check("/api/coach", 400, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ transcript: "   " }),
+});
+const coachResponse = await check("/api/coach", 200, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ transcript: "I am ready to share a story today." }),
+});
+const coachData = await coachResponse.json();
+if (!Number.isInteger(coachData.wordCount) || coachData.wordCount < 1) throw new Error("Coach returned an invalid word count.");
+if (!coachData.feedback || typeof coachData.feedback.tip !== "string") throw new Error("Coach returned invalid feedback.");
+console.log("PASS coach feedback payload");
 console.log("Courant production smoke checks passed.");
