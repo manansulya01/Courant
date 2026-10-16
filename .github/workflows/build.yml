@@ -11,12 +11,23 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - run: npm install --no-audit --no-fund
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run build
+      - name: Smoke test production routes and auth boundaries
+        run: |
+          npm run start > /tmp/courant-next.log 2>&1 &
+          echo $! > /tmp/courant-next.pid
+          node scripts/smoke.mjs
+        env:
+          PORT: 3000
+      - name: Stop production server
+        if: always()
+        run: if [ -f /tmp/courant-next.pid ]; then kill "$(cat /tmp/courant-next.pid)" || true; fi
