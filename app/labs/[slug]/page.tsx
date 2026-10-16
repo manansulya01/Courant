@@ -2,7 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import NextImage from "next/image";
 
 const scenarios: Record<string, { title: string; opening: string; prompt: string; level: string; minutes: string }> = {
   restaurant: { title: "At the restaurant", opening: "Hello! Welcome in. What would you like to order today?", prompt: "Order a meal, ask a question, and practise polite requests.", level: "Everyday English", minutes: "6 min" },
@@ -285,7 +285,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
               </div>
             ))}
             {busy && <div className="flex justify-start"><div className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-xs text-[var(--muted)]"><span className="flex gap-1"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]"/><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)] [animation-delay:150ms]"/><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)] [animation-delay:300ms]"/></span>Finding the right words…</div></div>}
-            {image && <div className="ml-auto max-w-[85%] rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3"><div className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-medium">{imageName || "Picture selected"}</span><button type="button" onClick={() => { setImage(""); setImageName(""); }} className="shrink-0 text-[var(--muted)] underline underline-offset-2">Remove</button></div><Image src={image} alt="Preview of the picture selected for your tutor" width={640} height={360} unoptimized className="mt-3 max-h-48 rounded-xl object-contain"/></div>}
+            {image && <div className="ml-auto max-w-[85%] rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3"><div className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-medium">{imageName || "Picture selected"}</span><button type="button" onClick={() => { setImage(""); setImageName(""); }} className="shrink-0 text-[var(--muted)] underline underline-offset-2">Remove</button></div><NextImage src={image} alt="Preview of the picture selected for your tutor" width={640} height={360} unoptimized className="mt-3 max-h-48 rounded-xl object-contain"/></div>}
             <div ref={bottomRef}/>
           </div>
 
