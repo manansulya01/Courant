@@ -259,7 +259,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
               <div><p className="text-sm font-semibold tracking-[-.02em]">Courant tutor</p><p className="mt-1 text-[10px] text-[var(--muted)]">One conversation at a time</p></div>
             </div>
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setVoiceEnabled(value => !value)} aria-pressed={voiceEnabled} className="flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-2 text-[10px] font-semibold text-[var(--muted)] transition hover:bg-[var(--paper)]" title={voiceEnabled ? "Turn spoken replies off" : "Turn spoken replies on"}><span>{voiceEnabled ? "◖" : "◌"}</span><span className="hidden sm:inline">{voiceEnabled ? "Voice on" : "Voice off"}</span></button>
+              <button type="button" onClick={() => { if (voiceEnabled) { audioRef.current?.pause(); if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } setVoiceEnabled(!voiceEnabled); }} aria-pressed={voiceEnabled} className="flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-2 text-[10px] font-semibold text-[var(--muted)] transition hover:bg-[var(--paper)]" title={voiceEnabled ? "Turn spoken replies off" : "Turn spoken replies on"}><span>{voiceEnabled ? "◖" : "◌"}</span><span className="hidden sm:inline">{voiceEnabled ? "Voice on" : "Voice off"}</span></button>
               <span className="hidden items-center gap-2 text-[10px] text-[var(--muted)] sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${busy || recording ? "animate-pulse bg-amber-500" : "bg-[var(--accent)]"}`}/>{recording ? "Recording" : busy ? "Thinking" : "Ready"}</span>
             </div>
           </div>
