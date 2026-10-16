@@ -43,12 +43,12 @@ await check("/api/teacher", 401);
 await check("/api/tutor", 405);
 await check("/api/tutor", 503, {
   method: "POST",
-  headers: { "Content-Type": "application/json", Origin: baseUrl },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ message: "hello", scenario: "A confident introduction", history: [] }),
 });
 await check("/api/tutor/speech", 503, {
   method: "POST",
-  headers: { "Content-Type": "application/json", Origin: baseUrl },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ text: "Hello there." }),
 });
 await check("/api/tutor/transcribe", 503, {
@@ -57,7 +57,7 @@ await check("/api/tutor/transcribe", 503, {
 });
 await check("/api/account", 401, {
   method: "DELETE",
-  headers: { "Content-Type": "application/json", Origin: baseUrl },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ confirmEmail: "nobody@example.com" }),
 });
 console.log("Courant production smoke checks passed.");
