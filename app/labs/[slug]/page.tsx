@@ -2,6 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 const scenarios: Record<string, { title: string; opening: string; prompt: string; level: string; minutes: string }> = {
   restaurant: { title: "At the restaurant", opening: "Hello! Welcome in. What would you like to order today?", prompt: "Order a meal, ask a question, and practise polite requests.", level: "Everyday English", minutes: "6 min" },
@@ -238,7 +239,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
               <div className="grid h-10 w-10 place-items-center rounded-full bg-[var(--accent)] text-sm font-medium text-white">c.</div>
               <div><p className="text-xs font-semibold">Your learning partner</p><p className="mt-1 text-[10px] text-[#6b7467]">Patient, curious, on your side</p></div>
             </div>
-            <p className="mt-5 text-base leading-7 tracking-[-.02em]">You don't need the perfect words. You just need a place to try them.</p>
+            <p className="mt-5 text-base leading-7 tracking-[-.02em]">You don&apos;t need the perfect words. You just need a place to try them.</p>
           </div>
 
           <div className="relative mt-7 space-y-4">
@@ -269,7 +270,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
                 <div className="max-w-sm">
                   <div className="relative mx-auto grid h-20 w-20 place-items-center rounded-full border border-[#dce3d7] bg-[#f0f3ed]"><span className="text-xl font-medium text-[var(--accent)]">c.</span><span className="absolute bottom-1 right-1 h-3 w-3 rounded-full border-2 border-white bg-[var(--accent)]"/></div>
                   <p className="mt-7 text-[10px] font-bold uppercase tracking-[.17em] text-[var(--accent)]">Your practice, your pace</p>
-                  <h2 className="mt-3 text-2xl font-medium tracking-[-.045em] sm:text-3xl">Let's find your words.</h2>
+                  <h2 className="mt-3 text-2xl font-medium tracking-[-.045em] sm:text-3xl">Let&apos;s find your words.</h2>
                   <p className="mx-auto mt-3 max-w-xs text-sm leading-6 text-[var(--muted)]">Start with a gentle opening, or jump straight into a thought of your own.</p>
                   <button type="button" onClick={begin} className="mt-6 rounded-full bg-[var(--accent)] px-6 py-3.5 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-px hover:bg-[var(--accent-hover)]">Begin the conversation <span className="ml-2">↗</span></button>
                 </div>
@@ -284,7 +285,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
               </div>
             ))}
             {busy && <div className="flex justify-start"><div className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-xs text-[var(--muted)]"><span className="flex gap-1"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]"/><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)] [animation-delay:150ms]"/><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)] [animation-delay:300ms]"/></span>Finding the right words…</div></div>}
-            {image && <div className="ml-auto max-w-[85%] rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3"><div className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-medium">{imageName || "Picture selected"}</span><button type="button" onClick={() => { setImage(""); setImageName(""); }} className="shrink-0 text-[var(--muted)] underline underline-offset-2">Remove</button></div><img src={image} alt="Preview of the picture selected for your tutor" className="mt-3 max-h-48 rounded-xl object-contain"/></div>}
+            {image && <div className="ml-auto max-w-[85%] rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3"><div className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-medium">{imageName || "Picture selected"}</span><button type="button" onClick={() => { setImage(""); setImageName(""); }} className="shrink-0 text-[var(--muted)] underline underline-offset-2">Remove</button></div><Image src={image} alt="Preview of the picture selected for your tutor" width={640} height={360} unoptimized className="mt-3 max-h-48 rounded-xl object-contain"/></div>}
             <div ref={bottomRef}/>
           </div>
 
