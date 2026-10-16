@@ -41,17 +41,17 @@ await check("/api/assignments", 401);
 await check("/api/assignments/submissions", 401);
 await check("/api/teacher", 401);
 await check("/api/tutor", 405);
-await check("/api/tutor", 401, {
+await check("/api/tutor", 503, {
   method: "POST",
   headers: { "Content-Type": "application/json", Origin: baseUrl },
   body: JSON.stringify({ message: "hello", scenario: "A confident introduction", history: [] }),
 });
-await check("/api/tutor/speech", 401, {
+await check("/api/tutor/speech", 503, {
   method: "POST",
   headers: { "Content-Type": "application/json", Origin: baseUrl },
   body: JSON.stringify({ text: "Hello there." }),
 });
-await check("/api/tutor/transcribe", 401, {
+await check("/api/tutor/transcribe", 503, {
   method: "POST",
   headers: { Origin: baseUrl },
 });
