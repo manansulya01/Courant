@@ -53,7 +53,7 @@ await check("/api/tutor/speech", 503, {
 });
 await check("/api/tutor/transcribe", 503, {
   method: "POST",
-  headers: { Origin: baseUrl },
+  headers: {},
 });
 await check("/api/account", 401, {
   method: "DELETE",
