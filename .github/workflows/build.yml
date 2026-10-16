@@ -24,8 +24,6 @@ jobs:
           OPENAI_API_KEY: ""
         run: |
           npm run start -- --hostname 127.0.0.1 > /tmp/courant.log 2>&1 &
-          echo $! > /tmp/courant.pid
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           node scripts/smoke.mjs
-          status=$?
-          kill "$(cat /tmp/courant.pid)" 2>/dev/null || true
-          exit "$status"
