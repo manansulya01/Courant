@@ -88,7 +88,8 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "The tutor could not reply. Please try again.");
       if (typeof data.reply !== "string" || !data.reply.trim()) throw new Error("Your tutor returned an empty reply. Please try again.");
-      setHistory(old => [...old, userTurn, { role: "assistant", content: data.reply }].slice(-20));
+      const assistantTurn: ChatTurn = { role: "assistant", content: data.reply };
+      setHistory(old => [...old, userTurn, assistantTurn].slice(-20));
       setDraft("");
       setImage("");
       setImageName("");
