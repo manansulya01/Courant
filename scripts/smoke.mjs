@@ -53,6 +53,21 @@ await check("/api/coach", 400, {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ transcript: "   " }),
 });
+await check("/api/coach", 400, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: "{malformed-json",
+});
+await check("/api/coach", 400, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(["not", "an", "object"]),
+});
+await check("/api/coach", 413, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ transcript: "x".repeat(20_001) }),
+});
 const coachResponse = await check("/api/coach", 200, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -61,5 +76,7 @@ const coachResponse = await check("/api/coach", 200, {
 const coachData = await coachResponse.json();
 if (!Number.isInteger(coachData.wordCount) || coachData.wordCount < 1) throw new Error("Coach returned an invalid word count.");
 if (!coachData.feedback || typeof coachData.feedback.tip !== "string") throw new Error("Coach returned invalid feedback.");
-console.log("PASS coach feedback payload");
+if (coachData.feedbackBasis !== "text-only-estimate" || !coachData.feedbackDisclaimer) throw new Error("Coach must disclose that its indicators are estimates from text.");
+if (coachResponse.headers.get("cache-control") !== "no-store") throw new Error("Coach response must not be cached.");
+console.log("PASS coach feedback payload and estimate disclosure");
 console.log("Courant production smoke checks passed.");
