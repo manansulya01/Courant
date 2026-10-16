@@ -30,6 +30,12 @@ if (home.headers.get("x-frame-options") !== "DENY") throw new Error("Missing X-F
 if (home.headers.get("x-content-type-options") !== "nosniff") throw new Error("Missing X-Content-Type-Options security header.");
 await check("/labs", 200);
 await check("/labs/confident-introduction", 200);
+await check("/login", 200);
+await check("/dashboard", 200);
+await check("/teacher", 200);
+await check("/creator", 200);
+await check("/practice-plan", 200);
+await check("/not-a-real-courant-route", 404);
 await check("/api/tutor", 405);
 await check("/api/tutor", 503, {
   method: "POST",
