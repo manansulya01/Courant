@@ -60,7 +60,7 @@ export async function DELETE(request: Request) {
       db.collection("learningProgress").deleteMany({ userId: user.id }),
       db.collection("portfolioItems").deleteMany({ userId: user.id }),
       db.collection("assignmentSubmissions").deleteMany({ $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }),
-      db.collection("classes").updateMany({ studentIds: user.id }, { $pull: { studentIds: { $in: [user.id] } }, $set: { updatedAt: new Date() } }),
+      db.collection("classes").updateMany({ studentIds: user.id }, { $pull: { studentIds: user.id }, $set: { updatedAt: new Date() } }),
       db.collection("classes").deleteMany({ teacherId: user.id }),
       db.collection("assignments").deleteMany({ _id: { $in: ownedAssignments.map((item) => item._id) } }),
     ]);
