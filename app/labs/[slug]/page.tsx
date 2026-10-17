@@ -38,6 +38,10 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       if ("speechSynthesis" in window) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); }
     }
   }
+  async function replayLastReply() {
+    const lastReply = [...history].reverse().find(turn => turn.role === "assistant");
+    if (lastReply) await speak(lastReply.content);
+  }
   async function send(text = draft.trim()) {
     if ((!text && !image) || busy) return;
     setBusy(true); setError(""); setNotice("Thinking about your answer…");
@@ -130,6 +134,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
         <label className="text-xs font-semibold">Your message<textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="Write a response, ask a question, or describe what you'd like to learn…" className="mt-2 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4 text-sm leading-6 outline-none focus:border-[var(--accent)]" /></label>
         <div className="mt-3 flex flex-wrap gap-2 sm:gap-3">
           <button type="button" disabled={busy} onClick={() => recording ? stopRecording() : void startRecording()} className={`rounded-full px-4 py-3 text-xs font-semibold transition disabled:opacity-40 ${recording ? "bg-[#f8e9e4] text-[#8d3f2d]" : "bg-[var(--accent)] text-white hover:opacity-90"}`}>{recording ? "Stop recording ■" : "Speak ◉"}</button>
+          <button type="button" disabled={busy || !history.some(turn => turn.role === "assistant")} onClick={() => void replayLastReply()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:opacity-40" aria-label="Listen to the latest Courant reply again">Listen again ↻</button>
           <button type="button" disabled={busy} onClick={() => imageInput.current?.click()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:opacity-40">Show a picture +</button>
           <input ref={imageInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { void pickImage(e.target.files?.[0]); e.currentTarget.value = ""; }} aria-label="Choose or take a picture" />
           <button type="button" disabled={busy || (!draft.trim() && !image)} onClick={() => void send()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:cursor-not-allowed disabled:opacity-40">Send →</button>
