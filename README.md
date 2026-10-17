@@ -16,6 +16,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 ## Main experiences
 
 - `/labs` and `/labs/[slug]` — scenario library and AI practice room
+- `/talk` — open-ended spoken English conversation with push-to-talk, transcription, natural spoken replies, replay, and text fallback
 - `/practice-plan` — configurable practice plan
 - `/signup` and `/login` — account creation and sign-in
 - `/dashboard` — learner progress, class membership, assignments, and saved sessions
