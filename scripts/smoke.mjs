@@ -29,7 +29,7 @@ const home = await check("/", 200);
 if (home.headers.get("x-frame-options") !== "DENY") throw new Error("Missing X-Frame-Options security header.");
 if (home.headers.get("x-content-type-options") !== "nosniff") throw new Error("Missing X-Content-Type-Options security header.");
 for (const path of [
-  "/labs", "/labs/confident-introduction", "/login", "/signup", "/dashboard",
+  "/labs", "/labs/confident-introduction", "/talk", "/login", "/signup", "/dashboard",
   "/teacher", "/creator", "/practice-plan", "/forgot-password", "/reset-password", "/settings",
 ]) await check(path, 200);
 await check("/not-a-real-courant-route", 404);
