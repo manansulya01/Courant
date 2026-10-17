@@ -1,12 +1,35 @@
 name: build-check
-on: [push, pull_request]
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install
+      - name: Report dependency audit findings
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node -e 'const audit = require("/tmp/npm-audit.json"); console.log("Audit summary:", JSON.stringify(audit.metadata?.vulnerabilities ?? {})); for (const [name, issue] of Object.entries(audit.vulnerabilities ?? {})) console.log(JSON.stringify({ name, severity: issue.severity, range: issue.range, direct: issue.isDirect, via: issue.via, fixAvailable: issue.fixAvailable }));'
+      - run: npm audit --audit-level=high
+      - run: npm run lint
       - run: npm run build
+      - name: Smoke-test production routes
+        env:
+          OPENAI_API_KEY: ""
+        run: |
+          npm run start -- --hostname 127.0.0.1 > /tmp/courant.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          node scripts/smoke.mjs

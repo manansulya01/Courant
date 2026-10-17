@@ -38,8 +38,8 @@ export default function AppShell({children}:{children:React.ReactNode}) {
         <Link href="/labs" className="mt-3 inline-block text-xs font-semibold text-[var(--accent)]">Start a session ↗</Link>
       </div>
       <div className="mt-5 flex items-center gap-3 border-t border-[var(--line)] pt-5 px-2">
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-[#e9e5d9] text-xs font-semibold">A</div>
-        <div><p className="text-xs font-semibold">Alex Morgan</p><p className="mt-1 text-[10px] text-[var(--muted)]">Personal workspace</p></div>
+        <div className="grid h-9 w-9 place-items-center rounded-full bg-[#e9e5d9] text-xs font-semibold">G</div>
+        <div><p className="text-xs font-semibold">Guest learner</p><p className="mt-1 text-[10px] text-[var(--muted)]">Demo workspace</p></div>
         <Link href="/login" className="ml-auto text-xs text-[var(--muted)]" aria-label="Account settings">↗</Link>
       </div>
     </aside>

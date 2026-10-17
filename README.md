@@ -18,14 +18,33 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `POST /api/tutor` — conversational tutoring with optional image input
 - `POST /api/tutor/transcribe` — converts recorded speech to text
 - `POST /api/tutor/speech` — returns a spoken audio reply
-- `POST /api/coach` — legacy heuristic demo feedback endpoint
+- `POST /api/coach` — lightweight text-only practice hints
 
 The learning room uses an OpenAI chat model for age-appropriate conversational coaching, an audio transcription model to hear recorded answers, a speech model for spoken replies, and a vision-capable chat model to discuss images. iPad users can record audio through the browser's MediaRecorder API and use the image picker/camera when supported. HTTPS and user permission are required for microphone/camera access in deployed environments.
+
+The legacy coach endpoint derives rough indicators from transcript text. They are not objective measurements of pronunciation, speaking speed, emotion, or confidence. Use them as reflection prompts only.
+
+## Quality checks
+
+- `npm run lint` — lint the project.
+- `npm run build` — compile the production application.
+- `npm run start` in one terminal, then `node scripts/smoke.mjs` in another — exercise production routes and API error/validation paths.
+- GitHub Actions runs the audit, lint, build, and production smoke checks for pull requests and changes pushed to `main`.
 
 ## Current limitations and responsible use
 
 The live AI routes need a valid provider API key and have not been validated in production yet. API usage may incur provider charges. The prototype does not persist chat sessions or recordings to MongoDB. Sign-in and student/teacher dashboards remain demo screens; they are not authenticated or connected to saved student records. Browser/media support varies by iPadOS version. Obtain appropriate school/guardian consent before deploying for children, avoid collecting personal details, and implement retention/deletion controls and role-based access before a real classroom rollout.
 
-## Production work remaining
+## Launch blockers
 
-Add secure authentication and role-based authorization, persist consented lesson progress in MongoDB, add provider rate limits and abuse protection, test supported iPadOS/Safari versions, add accessibility and privacy review, and verify deployment end to end.
+These cannot be honestly completed or verified from source-code changes alone:
+
+- Configure real deployment secrets and test OpenAI/MongoDB connectivity in the target environment.
+- Choose and implement a production identity provider, session management, teacher/student roles, and server-side authorization.
+- Define consent, retention, export and deletion policy for learner data before storing any student records or recordings.
+- Add shared/distributed rate limiting and abuse protection at the hosting/edge layer; process-local counters are not sufficient in a multi-instance deployment.
+- Run end-to-end tests on the actual supported iPadOS/Safari versions, including camera/microphone permission denial, interruption, and accessibility checks.
+- Pin dependencies with a committed lockfile and review automated dependency updates.
+- Verify deployment domain, HTTPS, environment variables, monitoring, backups, recovery and incident response.
+
+Do not use the demo workspaces for real student records or classroom deployment until these controls are implemented and reviewed.
