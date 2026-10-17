@@ -1,0 +1,3 @@
+import {NextResponse} from "next/server";import {getCurrentUser} from "@/lib/auth";import {getDatabase} from "@/lib/mongodb";
+export const runtime="nodejs";
+export async function GET(){const user=await getCurrentUser();if(!user)return NextResponse.json({error:"Sign in to view classes."},{status:401});try{const query=user.role==="student"?{studentIds:user.id}:{teacherId:user.id};const classes=await(await getDatabase()).collection("classes").find(query).sort({createdAt:-1}).limit(100).toArray();return NextResponse.json({classes:classes.map(({_id,...c})=>({...c,id:_id.toString(),studentCount:c.studentIds?.length||0}))})}catch{return NextResponse.json({error:"Could not load classes."},{status:503})}}
