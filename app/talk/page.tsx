@@ -93,6 +93,7 @@ export default function TalkPage() {
           if (!response.ok) throw new Error(data.error || "I couldn't transcribe that recording.");
           if (!String(data.text || "").trim()) throw new Error("I couldn't hear that clearly. Try again or type your answer.");
           setStatus("I heard: " + data.text);
+          setBusy(false);
           await send(String(data.text).trim());
         } catch (e) {
           setError(e instanceof Error ? e.message : "Audio transcription failed.");
