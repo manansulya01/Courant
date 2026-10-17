@@ -38,14 +38,14 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Sign in before deleting your account." }, { status: 401 });
   try {
     const rate = await checkRateLimit(request, "account-delete", 3, 3600);
     if (!rate.allowed) return NextResponse.json({ error: "Too many deletion attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 3600) } });
   } catch {
     return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
   }
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Sign in before deleting your account." }, { status: 401 });
   try {
     const body = await request.json();
     if (typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
