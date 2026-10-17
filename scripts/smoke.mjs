@@ -55,7 +55,7 @@ await check("/api/tutor/transcribe", 503, {
   method: "POST",
   headers: {},
 });
-await check("/api/account", 503, {
+await check("/api/account", 401, {
   method: "DELETE",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ confirmEmail: "nobody@example.com" }),
