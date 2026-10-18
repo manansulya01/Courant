@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
-import { getDatabase } from "@/lib/mongodb";
+import { getDatabase, getMongoClient } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
@@ -11,6 +11,61 @@ async function teacher() {
   if (!user) return { error: NextResponse.json({ error: "Sign in to access teacher tools." }, { status: 401 }) };
   if (!["teacher", "admin"].includes(user.role)) return { error: NextResponse.json({ error: "Teacher permissions are required." }, { status: 403 }) };
   return { user };
+}
+
+async function readBoundedJson(request: Request, maxBytes: number): Promise<Record<string, unknown> | NextResponse> {
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > maxBytes) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
+  if (!request.body) return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return NextResponse.json({ error: "Request is too large." }, { status: 413 });
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return NextResponse.json({ error: "Could not read request body." }, { status: 400 });
+  }
+
+  try {
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
+  }
+}
+
+async function mutationRateLimit(request: Request, scope: string) {
+  try {
+    const rate = await checkRateLimit(request, scope, 40, 60);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait before trying again." },
+        { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } },
+      );
+    }
+    return null;
+  } catch {
+    return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
+  }
 }
 
 export async function GET() {
@@ -37,23 +92,14 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
-  let body: Record<string, unknown>;
-  try {
-    const length = Number(request.headers.get("content-length") || 0);
-    if (length > 16_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-    body = await request.json();
-    if (!body || Array.isArray(body) || typeof body !== "object") return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
-  }
-  try {
-    const rate = await checkRateLimit(request, "teacher-write", 40, 60);
-    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
-  } catch {
-    return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
-  }
+  const limited = await mutationRateLimit(request, "teacher-write");
+  if (limited) return limited;
+  const parsed = await readBoundedJson(request, 16_000);
+  if (parsed instanceof NextResponse) return parsed;
+  const body = parsed;
   const access = await teacher();
   if ("error" in access) return access.error;
+
   try {
     const db = await getDatabase();
     const now = new Date();
@@ -87,49 +133,59 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
-  let body: Record<string, unknown>;
-  try {
-    const length = Number(request.headers.get("content-length") || 0);
-    if (length > 4_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-    body = await request.json();
-    if (!body || Array.isArray(body) || typeof body !== "object") return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
-  }
-  try {
-    const rate = await checkRateLimit(request, "teacher-delete", 40, 60);
-    if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Please wait before trying again." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } });
-  } catch {
-    return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
+  const limited = await mutationRateLimit(request, "teacher-delete");
+  if (limited) return limited;
+  const parsed = await readBoundedJson(request, 4_000);
+  if (parsed instanceof NextResponse) return parsed;
+  const body = parsed;
+  if (typeof body.id !== "string" || !ObjectId.isValid(body.id) || !["class", "assignment"].includes(String(body.type))) {
+    return NextResponse.json({ error: "Invalid item." }, { status: 400 });
   }
   const access = await teacher();
   if ("error" in access) return access.error;
+
+  const client = await getMongoClient();
+  const session = client.startSession();
   try {
-    const db = await getDatabase();
-    if (typeof body.id !== "string" || !ObjectId.isValid(body.id) || !["class", "assignment"].includes(String(body.type))) {
-      return NextResponse.json({ error: "Invalid item." }, { status: 400 });
-    }
+    const db = client.db(process.env.MONGODB_DB || "courant");
+    let notFound = false;
+    await session.withTransaction(async () => {
+      if (body.type === "assignment") {
+        const assignment = await db.collection("assignments").findOne(
+          { _id: new ObjectId(body.id as string), teacherId: access.user.id },
+          { projection: { _id: 1 }, session },
+        );
+        if (!assignment) {
+          notFound = true;
+          return;
+        }
+        await db.collection("assignmentSubmissions").deleteMany({ assignmentId: body.id }, { session });
+        await db.collection("assignments").deleteOne({ _id: assignment._id, teacherId: access.user.id }, { session });
+        return;
+      }
 
-    if (body.type === "assignment") {
-      const assignment = await db.collection("assignments").findOne({ _id: new ObjectId(body.id), teacherId: access.user.id }, { projection: { _id: 1 } });
-      if (!assignment) return NextResponse.json({ error: "Item not found." }, { status: 404 });
-      await db.collection("assignmentSubmissions").deleteMany({ assignmentId: body.id });
-      await db.collection("assignments").deleteOne({ _id: assignment._id, teacherId: access.user.id });
-      return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
-    }
-
-    const cls = await db.collection("classes").findOne({ _id: new ObjectId(body.id), teacherId: access.user.id }, { projection: { _id: 1 } });
-    if (!cls) return NextResponse.json({ error: "Item not found." }, { status: 404 });
-    const classId = cls._id.toString();
-    const assignments = await db.collection("assignments").find({ classId, teacherId: access.user.id }, { projection: { _id: 1 } }).toArray();
-    const assignmentIds = assignments.map((item) => item._id.toString());
-    // Keep related records consistent when a teacher removes a class.
-    await db.collection("assignmentSubmissions").deleteMany({ assignmentId: { $in: assignmentIds } });
-    await db.collection("assignments").deleteMany({ classId, teacherId: access.user.id });
-    await db.collection("learningProgress").updateMany({ classId }, { $unset: { classId: "" } });
-    await db.collection("classes").deleteOne({ _id: cls._id, teacherId: access.user.id });
+      const cls = await db.collection("classes").findOne(
+        { _id: new ObjectId(body.id as string), teacherId: access.user.id },
+        { projection: { _id: 1 }, session },
+      );
+      if (!cls) {
+        notFound = true;
+        return;
+      }
+      const classId = cls._id.toString();
+      const assignments = await db.collection("assignments")
+        .find({ classId, teacherId: access.user.id }, { projection: { _id: 1 }, session }).toArray();
+      const assignmentIds = assignments.map((item) => item._id.toString());
+      await db.collection("assignmentSubmissions").deleteMany({ assignmentId: { $in: assignmentIds } }, { session });
+      await db.collection("assignments").deleteMany({ classId, teacherId: access.user.id }, { session });
+      await db.collection("learningProgress").updateMany({ classId }, { $unset: { classId: "" } }, { session });
+      await db.collection("classes").deleteOne({ _id: cls._id, teacherId: access.user.id }, { session });
+    });
+    if (notFound) return NextResponse.json({ error: "Item not found." }, { status: 404, headers: { "Cache-Control": "no-store" } });
     return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch {
-    return NextResponse.json({ error: "Could not delete item." }, { status: 503 });
+    return NextResponse.json({ error: "Could not delete item. No changes were committed." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  } finally {
+    await session.endSession();
   }
 }
