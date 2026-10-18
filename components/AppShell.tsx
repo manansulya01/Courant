@@ -6,10 +6,12 @@ import {usePathname} from "next/navigation";
 const navigation = [
   {label:"Overview",href:"/dashboard",number:"01"},
   {label:"Practice room",href:"/labs",number:"02"},
-  {label:"Practice plan",href:"/practice-plan",number:"03"},
-  {label:"My progress",href:"/dashboard#progress",number:"04"},
-  {label:"Recordings",href:"/dashboard#recordings",number:"05"},
-  {label:"Creator Studio",href:"/creator",number:"06"},
+  {label:"Talk in English",href:"/talk",number:"03"},
+  {label:"Practice plan",href:"/practice-plan",number:"04"},
+  {label:"My progress",href:"/dashboard#progress",number:"05"},
+  {label:"Recordings",href:"/dashboard#recordings",number:"06"},
+  {label:"Creator Studio",href:"/creator",number:"07"},
+  {label:"Account settings",href:"/settings",number:"08"},
 ];
 
 export default function AppShell({children}:{children:React.ReactNode}) {
@@ -26,7 +28,7 @@ export default function AppShell({children}:{children:React.ReactNode}) {
       <div className="mt-12 px-3 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--muted)]">Your workspace</div>
       <nav aria-label="Main navigation" className="mt-3 space-y-1">
         {navigation.map(item=>{
-          const active=pathname===item.href || (item.href==="/labs"&&pathname.startsWith("/labs")) || (item.href==="/creator"&&pathname==="/creator") || (item.href==="/practice-plan"&&pathname==="/practice-plan") || (item.href==="/dashboard"&&pathname==="/dashboard");
+          const active=pathname===item.href || (item.href==="/labs"&&pathname.startsWith("/labs")) || (item.href==="/talk"&&pathname==="/talk") || (item.href==="/creator"&&pathname==="/creator") || (item.href==="/practice-plan"&&pathname==="/practice-plan") || (item.href==="/dashboard"&&pathname==="/dashboard");
           return <Link key={item.href} href={item.href} onClick={()=>setOpen(false)} aria-current={active?"page":undefined} className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] transition-colors ${active?"bg-[var(--accent-soft)] font-semibold text-[var(--accent)]":"text-[#666b62] hover:bg-[#f2f1eb] hover:text-[var(--ink)]"}`}>
             <span className="w-5 font-mono text-[10px] opacity-60">{item.number}</span>{item.label}{active&&<span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--accent)]"/>}
           </Link>;

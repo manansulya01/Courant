@@ -22,6 +22,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
   const [imageName, setImageName] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("Your coach is ready. Choose a way to practise.");
+  const [saved, setSaved] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -36,6 +37,10 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
     } catch {
       if ("speechSynthesis" in window) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); }
     }
+  }
+  async function replayLastReply() {
+    const lastReply = [...history].reverse().find(turn => turn.role === "assistant");
+    if (lastReply) await speak(lastReply.content);
   }
   async function send(text = draft.trim()) {
     if ((!text && !image) || busy) return;
@@ -88,7 +93,19 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       setImage(data); setImageName(file.name); setError("");
     } catch { setError("That picture couldn't be loaded. Try another image."); }
   }
-  function begin() { setHistory([{ role: "assistant", content: scenario.opening }]); void speak(scenario.opening); setNotice("Conversation started. Speak, type, or show Courant something."); }
+  async function saveSession() {
+    if (history.filter(t => t.role === "user").length === 0 || saved) return;
+    setBusy(true); setError("");
+    try {
+      const minutes = Math.min(180, Math.max(1, Math.ceil(history.filter(t => t.role === "user").length * 1.5)));
+      const res = await fetch("/api/learning/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lesson: scenario.title, scenario: scenario.prompt, skill: slug === "storytelling" ? "confidence" : slug === "school-presentation" ? "presentation" : "conversation", minutes, completed: true }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sign in to save your progress.");
+      setSaved(true); setNotice("Session saved to your learning journal.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save session."); }
+    finally { setBusy(false); }
+  }
+  function begin() { setHistory([{ role: "assistant", content: scenario.opening }]); setSaved(false); void speak(scenario.opening); setNotice("Conversation started. Speak, type, or show Courant something."); }
   function reset() { if (recording) stopRecording(); setHistory([]); setDraft(""); setImage(""); setImageName(""); setError(""); setNotice("Your practice is reset. Start whenever you're ready."); if (audioRef.current) audioRef.current.pause(); }
 
   return <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -117,13 +134,15 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
         <label className="text-xs font-semibold">Your message<textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="Write a response, ask a question, or describe what you'd like to learn…" className="mt-2 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4 text-sm leading-6 outline-none focus:border-[var(--accent)]" /></label>
         <div className="mt-3 flex flex-wrap gap-2 sm:gap-3">
           <button type="button" disabled={busy} onClick={() => recording ? stopRecording() : void startRecording()} className={`rounded-full px-4 py-3 text-xs font-semibold transition disabled:opacity-40 ${recording ? "bg-[#f8e9e4] text-[#8d3f2d]" : "bg-[var(--accent)] text-white hover:opacity-90"}`}>{recording ? "Stop recording ■" : "Speak ◉"}</button>
+          <button type="button" disabled={busy || !history.some(turn => turn.role === "assistant")} onClick={() => void replayLastReply()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:opacity-40" aria-label="Listen to the latest Courant reply again">Listen again ↻</button>
           <button type="button" disabled={busy} onClick={() => imageInput.current?.click()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:opacity-40">Show a picture +</button>
           <input ref={imageInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { void pickImage(e.target.files?.[0]); e.currentTarget.value = ""; }} aria-label="Choose or take a picture" />
           <button type="button" disabled={busy || (!draft.trim() && !image)} onClick={() => void send()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold hover:bg-[#f1f0e9] disabled:cursor-not-allowed disabled:opacity-40">Send →</button>
+          <button type="button" disabled={busy || !history.some(t => t.role === "user") || saved} onClick={() => void saveSession()} className="rounded-full border border-[var(--line)] px-4 py-3 text-xs font-semibold disabled:opacity-40">{saved ? "Saved ✓" : "Save session"}</button>
           <button type="button" disabled={busy} onClick={reset} className="ml-auto px-2 py-3 text-xs text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-40">Reset</button>
         </div>
         <audio ref={audioRef} className="mt-3 hidden" controls />
-        <p className="mt-4 text-[10px] leading-5 text-[var(--muted)]">AI voice, audio transcription, and image understanding require an OpenAI API key configured on the server. Your API key is never sent to this page. This prototype does not save your session.</p>
+        <p className="mt-4 text-[10px] leading-5 text-[var(--muted)]">AI voice, audio transcription, and image understanding require an OpenAI API key configured on the server. Your API key is never sent to this page. Save a session to store lesson activity in your account. Conversation transcripts and recordings are not saved.</p>
       </section>
     </div>
   </main>;
