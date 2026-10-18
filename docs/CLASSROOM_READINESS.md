@@ -7,8 +7,9 @@ This checklist separates repository checks from launch tasks that require real c
 ### 1. Build, lint, dependency and route checks
 - [x] CI installs dependencies, audits production dependencies for high-severity vulnerabilities, runs ESLint, builds production assets and executes production smoke tests.
 - [x] Smoke checks cover key public routes, security headers, expected auth boundaries, unavailable-provider responses, and malformed/oversized coaching requests.
+- [x] Teacher write/delete handlers apply rate limits before bounded streaming JSON parsing; classroom cascades run in a MongoDB transaction.
 - [ ] Commit a lockfile and move CI to `npm ci` after dependency versions are intentionally pinned.
-- [ ] Add unit/integration tests with a disposable MongoDB instance and mocked provider responses.
+- [ ] Add unit/integration tests with a disposable replica-set MongoDB instance and mocked provider responses; verify transaction rollback and tenant isolation.
 
 ### 2. Authentication, authorization and tenant isolation
 - [x] Protected API routes return unauthenticated responses in production smoke tests.
