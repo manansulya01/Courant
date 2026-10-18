@@ -33,6 +33,10 @@ function getClientPromise() {
   return clientPromise;
 }
 
+export async function getMongoClient(): Promise<MongoClient> {
+  return getClientPromise();
+}
+
 export async function getDatabase(): Promise<Db> {
   const client = await getClientPromise();
   return client.db(databaseName);
