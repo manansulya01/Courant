@@ -60,4 +60,24 @@ await check("/api/account", 401, {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ confirmEmail: "nobody@example.com" }),
 });
+await check("/api/coach", 400, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ transcript: "   " }),
+});
+await check("/api/coach", 400, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: "{malformed-json",
+});
+await check("/api/coach", 400, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(["not", "an", "object"]),
+});
+await check("/api/coach", 413, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ transcript: "x".repeat(20_001) }),
+});
 console.log("Courant production smoke checks passed.");
