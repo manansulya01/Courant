@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDatabase, getMongoClient } from "@/lib/mongodb";
 import { readBoundedJson } from "@/lib/bounded-json";
 import { ObjectId } from "mongodb";
+import { generateClassJoinCode } from "@/lib/class-code";
 
 export const runtime = "nodejs";
 
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       const name = typeof body.name === "string" ? body.name.trim().slice(0, 100) : "";
       const description = typeof body.description === "string" ? body.description.trim().slice(0, 500) : "";
       if (name.length < 2) return NextResponse.json({ error: "Class name must be at least 2 characters." }, { status: 400 });
-      const joinCode = Array.from(crypto.getRandomValues(new Uint8Array(4))).map((v) => (v % 36).toString(36)).join("").toUpperCase();
+      const joinCode = generateClassJoinCode();
       const doc = { teacherId: access.user.id, name, description, joinCode, studentIds: [] as string[], createdAt: now, updatedAt: now };
       const result = await db.collection("classes").insertOne(doc);
       return NextResponse.json({ class: { ...doc, id: result.insertedId.toString() } }, { status: 201, headers: { "Cache-Control": "no-store" } });

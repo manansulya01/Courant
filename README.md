@@ -32,7 +32,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `/api/learning/progress` — save/read authenticated learner progress
 - `/api/portfolio` — authenticated portfolio CRUD
 - `/api/teacher` — teacher/admin class and assignment management
-- `/api/classes/join` — join a class with its teacher-issued code
+- `/api/classes/join` — join a class with its teacher-issued code (new classes use 8-character codes; existing 4-character codes remain valid)
 - `/api/assignments` — list assignments for classes a learner belongs to
 - `/api/assignments/submissions` — student submissions and teacher review
 - `/api/account` — export personal data or delete an account and associated records

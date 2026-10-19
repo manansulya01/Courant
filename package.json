@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test:security": "node --experimental-strip-types --test scripts/bounded-json.test.mjs"
+    "test:security": "node --experimental-strip-types --test scripts/bounded-json.test.mjs scripts/class-code.test.mjs"
   },
   "dependencies": {
     "mongodb": "^6.18.0",

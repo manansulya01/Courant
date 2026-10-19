@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { readBoundedJson } from "@/lib/bounded-json";
+import { normalizeClassJoinCode } from "@/lib/class-code";
 
 export const runtime = "nodejs";
 
@@ -31,8 +32,8 @@ export async function POST(request: Request) {
 
   const parsed = await readBoundedJson(request, 1_024);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
-  const code = typeof parsed.value.code === "string" ? parsed.value.code.trim().toUpperCase() : "";
-  if (!/^[A-Z0-9]{4}$/.test(code)) return NextResponse.json({ error: "Enter the four-character class code." }, { status: 400 });
+  const code = normalizeClassJoinCode(parsed.value.code);
+  if (!code) return NextResponse.json({ error: "Enter a valid class code (4 characters for older classes or 8 for new classes)." }, { status: 400 });
 
   try {
     const db = await getDatabase();
