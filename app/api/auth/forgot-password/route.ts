@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getDatabase } from "@/lib/mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -11,7 +12,9 @@ export async function POST(request: Request) {
     if (!rate.allowed) return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 3600) } });
   } catch { return NextResponse.json({ error: "Recovery is temporarily unavailable." }, { status: 503 }); }
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 4_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     const db = await getDatabase();

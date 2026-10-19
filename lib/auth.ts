@@ -32,7 +32,8 @@ export async function verifyPassword(password: string, stored: string) {
   return equal(actual.toString("hex"), digest);
 }
 export async function setSession(user: SafeUser) {
-  const payload = Buffer.from(JSON.stringify({ sub: user.id, role: user.role, exp: Math.floor(Date.now()/1000) + SESSION_SECONDS })).toString("base64url");
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(JSON.stringify({ sub: user.id, role: user.role, iat: issuedAt, exp: issuedAt + SESSION_SECONDS })).toString("base64url");
   const value = payload + "." + sign(payload);
   const jar = await cookies();
   jar.set(COOKIE, value, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: SESSION_SECONDS });
@@ -48,11 +49,14 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
     if (!value) return null;
     const [payload, signature, extra] = value.split(".");
     if (!payload || !signature || extra || !equal(sign(payload), signature)) return null;
-    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {sub:string; role:Role; exp:number};
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {sub:string; role:Role; iat?:number; exp:number};
     if (!session.sub || !ObjectId.isValid(session.sub) || session.exp < Math.floor(Date.now()/1000)) return null;
     const db = await getDatabase();
     const user = await db.collection("users").findOne({ _id: new ObjectId(session.sub), status: "active" });
     if (!user || !["student","teacher","parent","admin"].includes(user.role)) return null;
+    // Password resets revoke previously issued sessions. Older cookies without `iat`
+    // are rejected once a password-change timestamp exists on the account.
+    if (user.passwordChangedAt instanceof Date && (typeof session.iat !== "number" || !Number.isFinite(session.iat) || session.iat < Math.floor(user.passwordChangedAt.getTime() / 1000))) return null;
     return { id: user._id.toString(), name: user.name, email: user.email, role: user.role };
   } catch { return null; }
 }

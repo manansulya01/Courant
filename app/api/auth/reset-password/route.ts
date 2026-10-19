@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { hashPassword } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getDatabase } from "@/lib/mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -13,7 +14,9 @@ export async function POST(request: Request) {
     if (!rate.allowed) return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 3600) } });
   } catch { return NextResponse.json({ error: "Password reset is temporarily unavailable." }, { status: 503 }); }
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 4_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const token = typeof body.token === "string" ? body.token : "";
     const password = typeof body.password === "string" ? body.password : "";
     if (password.length < 10 || password.length > 128) return NextResponse.json({ error: "Use a password between 10 and 128 characters." }, { status: 400 });
