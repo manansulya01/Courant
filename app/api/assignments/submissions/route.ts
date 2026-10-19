@@ -76,7 +76,9 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Sign in to review work." }, { status: 401 });
   if (!["teacher", "admin"].includes(user.role)) return NextResponse.json({ error: "Teacher permissions are required." }, { status: 403 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 8_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     if (typeof body.id !== "string" || !ObjectId.isValid(body.id)) return NextResponse.json({ error: "Invalid submission." }, { status: 400 });
     const feedback = typeof body.feedback === "string" ? body.feedback.trim().slice(0, 3000) : "";
     const score = body.score === null || body.score === "" || body.score === undefined ? null : Number(body.score);
