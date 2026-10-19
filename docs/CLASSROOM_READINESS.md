@@ -69,7 +69,7 @@ Never commit these values or expose them through `NEXT_PUBLIC_*`. Configure them
 
 ## Live AI teacher capability boundary
 
-The live coach supports real-time spoken conversation through WebRTC, learner-level adaptation, live transcription in the page, and an optional post-call learning recap. Video mode captures a local camera preview and sends a compressed still frame roughly every six seconds as visual context; it does **not** stream continuous video to the model or generate a live human teacher video. Camera permission is requested by the browser and can be paused independently during the call. The recap is generated only when the learner asks for it and remains in the page; the live transcript is not automatically persisted.
+The live coach supports real-time spoken conversation through WebRTC, learner-level adaptation, live transcription in the page, and an optional post-call learning recap. When LiveAvatar is configured, video mode renders a continuously animated AI teacher with synchronized speech. The learner camera remains a separate optional preview; compressed still frames may also be sent roughly every six seconds to the OpenAI coach for visual context. Without LiveAvatar credentials, animated teacher video is unavailable. Camera permission is requested by the browser and can be paused independently during the call. The recap is generated only when the learner asks for it and remains in the page; the live transcript is not automatically persisted.
 
 ### Required release verification
 
