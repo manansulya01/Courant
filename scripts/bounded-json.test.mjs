@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readBoundedJson } from "../lib/bounded-json.ts";
+import { readBoundedBytes, readBoundedJson } from "../lib/bounded-json.ts";
 
 test("accepts a bounded JSON object", async () => {
   const request = new Request("http://localhost/api/test", {
@@ -55,6 +55,29 @@ test("rejects oversized streamed bodies when Content-Length is absent", async ()
   });
   assert.equal(request.headers.get("content-length"), null);
   const result = await readBoundedJson(request, 32);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.status, 413);
+});
+
+test("bounded byte reader returns exact bytes for multipart bodies", async () => {
+  const payload = new TextEncoder().encode("multipart-body");
+  const request = new Request("http://localhost/api/test", { method: "POST", body: payload });
+  const result = await readBoundedBytes(request, payload.byteLength);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.bytes, payload);
+});
+
+test("bounded byte reader rejects a streamed audio-sized body without Content-Length", async () => {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(1024));
+      controller.enqueue(new Uint8Array(1024));
+      controller.close();
+    },
+  });
+  const request = new Request("http://localhost/api/test", { method: "POST", body, duplex: "half" });
+  assert.equal(request.headers.get("content-length"), null);
+  const result = await readBoundedBytes(request, 1024);
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.status, 413);
 });
