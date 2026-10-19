@@ -53,8 +53,8 @@ export default function LiveCallPage() {
   const endCall = useCallback(() => {
     statusRef.current = "ending";
     setStatus("ending");
-    const avatar = avatarRef.current as { stopAvatar?: () => Promise<unknown> } | null;
-    if (avatar?.stopAvatar) void avatar.stopAvatar().catch(() => undefined);
+    const avatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+    if (avatar?.stop) void avatar.stop().catch(() => undefined);
     avatarRef.current = null;
     setAvatarReady(false);
     if (avatarVideoRef.current) avatarVideoRef.current.srcObject = null;
@@ -84,8 +84,8 @@ export default function LiveCallPage() {
     peerRef.current?.close();
     streamRef.current?.getTracks().forEach(track => track.stop());
     channelRef.current?.close();
-    const avatar = avatarRef.current as { stopAvatar?: () => Promise<unknown> } | null;
-    if (avatar?.stopAvatar) void avatar.stopAvatar().catch(() => undefined);
+    const avatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+    if (avatar?.stop) void avatar.stop().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -164,23 +164,23 @@ export default function LiveCallPage() {
         const avatarTokenResponse = await fetch("/api/tutor/avatar-token", { method: "POST" });
         const avatarTokenData = await avatarTokenResponse.json();
         if (!avatarTokenResponse.ok) throw new Error(avatarTokenData.error || "Animated teacher video is unavailable.");
-        const { default: StreamingAvatar, AvatarQuality, StreamingEvents, TaskType } = await import("@heygen/streaming-avatar");
-        const avatar = new StreamingAvatar({ token: avatarTokenData.token });
+        const { LiveAvatarSession, SessionEvent } = await import("@heygen/liveavatar-web-sdk");
+        const avatar = new LiveAvatarSession(avatarTokenData.sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
         avatarRef.current = avatar;
-        avatar.on(StreamingEvents.STREAM_READY, (event: { detail?: MediaStream }) => {
-          const avatarStream = event.detail;
-          if (avatarStream && avatarVideoRef.current) {
-            avatarVideoRef.current.srcObject = avatarStream;
-            void avatarVideoRef.current.play().catch(() => undefined);
+        avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
+          if (avatarVideoRef.current) {
+            avatar.attach(avatarVideoRef.current);
             setAvatarReady(true);
           }
         });
-        avatar.on(StreamingEvents.STREAM_DISCONNECTED, () => {
-          setAvatarReady(false);
-          if (statusRef.current === "connected") setStatusText("The animated teacher video disconnected. End the call and reconnect.");
+        avatar.on(SessionEvent.SESSION_STATE_CHANGED, (event: { state?: string; detail?: { state?: string } }) => {
+          const nextState = event.state || event.detail?.state;
+          if (nextState === "disconnected" || nextState === "stopped" || nextState === "failed") {
+            setAvatarReady(false);
+            if (statusRef.current === "connected") setStatusText("The animated teacher video disconnected. End the call and reconnect.");
+          }
         });
-        await avatar.createStartAvatar({ quality: AvatarQuality.High, avatarName: avatarTokenData.avatarId });
-        (avatar as unknown as { __courantRepeatTask?: string }).__courantRepeatTask = TaskType.REPEAT;
+        await avatar.start();
       }
 
       const peer = new RTCPeerConnection();
@@ -228,8 +228,8 @@ export default function LiveCallPage() {
             addLine("courant", transcript);
             if (mode === "video" && transcript !== lastAvatarTextRef.current) {
               lastAvatarTextRef.current = transcript;
-              const avatar = avatarRef.current as { speak: (options: { text: string; task_type: string }) => Promise<unknown>; __courantRepeatTask?: string } | null;
-              if (avatar) void avatar.speak({ text: transcript, task_type: avatar.__courantRepeatTask || "repeat" }).catch(() => setError("The animated teacher could not speak this reply. Please try reconnecting."));
+              const avatar = avatarRef.current as { repeat: (text: string) => Promise<unknown> } | null;
+              if (avatar) void avatar.repeat(transcript).catch(() => setError("The animated teacher could not speak this reply. Please try reconnecting."));
             }
           }
         }
