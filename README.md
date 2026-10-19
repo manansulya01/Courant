@@ -11,12 +11,14 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 5. Set `AUTH_SECRET` to a cryptographically random value at least 32 characters long. Do not commit real secrets.
 6. Optionally set `COURANT_TEACHER_INVITE_CODE`; teacher registration requires this invitation code.
 7. Add an OpenAI API key to `OPENAI_API_KEY` to enable AI conversation, image understanding, audio transcription, and spoken replies. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
+8. For live voice/video calls, ensure the OpenAI project has Realtime API access. Optional settings: `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_TRANSCRIPTION_MODEL`, and `OPENAI_REALTIME_VOICE`. The app issues short-lived client secrets from a same-origin, rate-limited server route; the permanent API key never reaches the browser.
 8. Run `npm run dev` and open `http://localhost:3000`.
 
 ## Main experiences
 
 - `/labs` and `/labs/[slug]` — scenario library and AI practice room
 - `/talk` — open-ended spoken English conversation with push-to-talk, transcription, natural spoken replies, replay, and text fallback
+- `/live-call` — low-latency real-time English voice/video practice with spoken corrections, selectable scenarios, and optional stricter correction mode
 - `/practice-plan` — configurable practice plan
 - `/signup` and `/login` — account creation and sign-in
 - `/dashboard` — learner progress, class membership, assignments, and saved sessions
@@ -28,6 +30,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `POST /api/tutor` — conversational tutoring with optional image input and recent saved learning context
 - `POST /api/tutor/transcribe` — converts recorded speech to text
 - `POST /api/tutor/speech` — returns a spoken audio reply
+- `POST /api/tutor/realtime-session` — issues a short-lived Realtime API client secret for WebRTC calls
 - `GET /api/health` — reports database readiness and whether server-side AI/auth configuration is present
 - `/api/learning/progress` — save/read authenticated learner progress
 - `/api/portfolio` — authenticated portfolio CRUD
@@ -37,7 +40,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `/api/assignments/submissions` — student submissions and teacher review
 - `/api/account` — export personal data or delete an account and associated records
 
-The application uses MongoDB collections for users, learning progress, classes, assignments, assignment submissions, rate limits, and portfolio items. Passwords are hashed using Node.js scrypt; sessions use signed, HttpOnly cookies. The app does not save chat transcripts or raw audio recordings; learners can explicitly save lesson metadata to their journal. In the practice room, learners can speak through push-to-talk recording, review the transcription before sending it, hear natural spoken replies, and replay the latest reply. A browser speech-synthesis fallback may be used if the configured voice service is unavailable.
+The application uses MongoDB collections for users, learning progress, classes, assignments, assignment submissions, rate limits, and portfolio items. Passwords are hashed using Node.js scrypt; sessions use signed, HttpOnly cookies. The app does not save chat transcripts or raw audio recordings; learners can explicitly save lesson metadata to their journal. In the turn-based practice room, learners can speak through push-to-talk recording, review the transcription before sending it, hear natural spoken replies, and replay the latest reply. Live calls use WebRTC for low-latency speech and return spoken corrections during the conversation. Video mode shares compressed camera snapshots every six seconds rather than a continuous video stream; camera/microphone access requires explicit browser permission and HTTPS in production. A browser speech-synthesis fallback may be used if the configured voice service is unavailable.
 
 ## Before production or school rollout
 
