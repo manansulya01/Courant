@@ -8,6 +8,7 @@ This checklist separates repository checks from launch tasks that require real c
 - [x] CI installs dependencies, audits production dependencies for high-severity vulnerabilities, runs ESLint, builds production assets and executes production smoke tests.
 - [x] Smoke checks cover key public routes, security headers, expected auth boundaries, unavailable-provider responses, malformed/oversized coaching requests, and oversized streamed bodies without `Content-Length`.
 - [x] Learner JSON APIs use a shared streaming byte limit instead of trusting `Content-Length` or buffering unbounded request bodies.
+- [x] Node test suite covers valid objects, malformed JSON, non-object JSON, declared-size rejection, and streamed oversized bodies.
 - [x] Teacher write/delete handlers apply rate limits before bounded streaming JSON parsing; classroom cascades run in a MongoDB transaction.
 - [ ] Commit a lockfile and move CI to `npm ci` after dependency versions are intentionally pinned.
 - [ ] Add unit/integration tests with a disposable replica-set MongoDB instance and mocked provider responses; verify transaction rollback and tenant isolation.
