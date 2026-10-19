@@ -12,13 +12,13 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 6. Optionally set `COURANT_TEACHER_INVITE_CODE`; teacher registration requires this invitation code.
 7. Add an OpenAI API key to `OPENAI_API_KEY` to enable AI conversation, image understanding, audio transcription, and spoken replies. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
 8. For live voice/video calls, ensure the OpenAI project has Realtime API access. Optional settings: `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_TRANSCRIPTION_MODEL`, and `OPENAI_REALTIME_VOICE`. The app issues short-lived client secrets from a same-origin, rate-limited server route; the permanent API key never reaches the browser.
-8. Run `npm run dev` and open `http://localhost:3000`.
+9. Run `npm run dev` and open `http://localhost:3000`.
 
 ## Main experiences
 
 - `/labs` and `/labs/[slug]` — scenario library and AI practice room
 - `/talk` — open-ended spoken English conversation with push-to-talk, transcription, natural spoken replies, replay, and text fallback
-- `/live-call` — low-latency real-time English voice/video practice with spoken corrections, selectable scenarios, and optional stricter correction mode
+- `/live-call` — low-latency real-time English voice/camera-assisted practice, beginner/intermediate/advanced coaching, mute and camera controls, and optional post-call feedback with corrections, useful phrases, and a speaking challenge
 - `/practice-plan` — configurable practice plan
 - `/signup` and `/login` — account creation and sign-in
 - `/dashboard` — learner progress, class membership, assignments, and saved sessions

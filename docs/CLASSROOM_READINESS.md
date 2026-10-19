@@ -65,3 +65,16 @@ This checklist separates repository checks from launch tasks that require real c
 - `COURANT_TEACHER_INVITE_CODE` if teacher invitation gating is enabled
 
 Never commit these values or expose them through `NEXT_PUBLIC_*`. Configure them in the deployment provider's secret manager. The automated suite intentionally runs without production credentials; its expected 503/401 responses are checks of safe failure behavior, not proof that live integrations work.
+
+
+## Live AI teacher capability boundary
+
+The live coach supports real-time spoken conversation through WebRTC, learner-level adaptation, live transcription in the page, and an optional post-call learning recap. Video mode captures a local camera preview and sends a compressed still frame roughly every six seconds as visual context; it does **not** stream continuous video to the model or generate a live human teacher video. Camera permission is requested by the browser and can be paused independently during the call. The recap is generated only when the learner asks for it and remains in the page; the live transcript is not automatically persisted.
+
+### Required release verification
+
+- [ ] Configure a server-side `OPENAI_API_KEY` with Realtime API access and verify `/api/tutor/realtime-session` returns a short-lived client secret.
+- [ ] Configure MongoDB Atlas, `AUTH_SECRET`, and production HTTPS.
+- [ ] Test voice call, mute, interruption, end-call cleanup, camera pause/resume, and recap generation on physical iPadOS/Safari and desktop browsers.
+- [ ] Confirm that provider usage limits, cost alerts, and data-processing/privacy notices are appropriate for the intended school and age group.
+- [ ] If a continuously animated AI teacher video is required, select and integrate a dedicated avatar/video provider; the current Realtime audio model does not generate that video stream.
