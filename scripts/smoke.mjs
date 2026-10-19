@@ -55,9 +55,14 @@ await check("/api/tutor/transcribe", 503, {
   method: "POST",
   headers: {},
 });
+await check("/api/account", 403, {
+  method: "DELETE",
+  headers: { "Content-Type": "application/json", "Origin": "https://attacker.example" },
+  body: JSON.stringify({ confirmEmail: "nobody@example.com" }),
+});
 await check("/api/account", 401, {
   method: "DELETE",
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
   body: JSON.stringify({ confirmEmail: "nobody@example.com" }),
 });
 await check("/api/coach", 400, {

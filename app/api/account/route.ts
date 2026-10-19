@@ -7,6 +7,50 @@ import { getDatabase, getMongoClient } from "@/lib/mongodb";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function readBoundedJson(request: Request, maxBytes = 4_096): Promise<unknown | NextResponse> {
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > maxBytes) {
+    return NextResponse.json({ error: "Request is too large." }, { status: 413, headers: { "Cache-Control": "no-store" } });
+  }
+  if (!request.body) {
+    return NextResponse.json({ error: "Enter your account email to confirm deletion." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return NextResponse.json({ error: "Request is too large." }, { status: 413, headers: { "Cache-Control": "no-store" } });
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return NextResponse.json({ error: "Could not read request body." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
+
+  try {
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!body || Array.isArray(body) || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    }
+    return body;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
+}
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to export your data." }, { status: 401 });
@@ -47,8 +91,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
   }
   try {
-    const body = await request.json();
-    if (typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
+    const body = await readBoundedJson(request);
+    if (body instanceof NextResponse) return body;
+    if (!body || Array.isArray(body) || typeof body !== "object" || !("confirmEmail" in body) || typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
       return NextResponse.json({ error: "Enter your account email to confirm deletion." }, { status: 400 });
     }
     const client = await getMongoClient();
@@ -75,7 +120,7 @@ export async function DELETE(request: Request) {
         );
         await db.collection("classes").updateMany(
           { studentIds: user.id },
-          [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$studentId", user.id] } } }, updatedAt: new Date() } }],
+          [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$$studentId", user.id] } } }, updatedAt: new Date() } }],
           { session },
         );
         await db.collection("classes").deleteMany({ teacherId: user.id }, { session });
