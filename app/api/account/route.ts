@@ -93,7 +93,7 @@ export async function DELETE(request: Request) {
   try {
     const body = await readBoundedJson(request);
     if (body instanceof NextResponse) return body;
-    if (!( "confirmEmail" in body) || typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
+    if (!body || Array.isArray(body) || typeof body !== "object" || !("confirmEmail" in body) || typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
       return NextResponse.json({ error: "Enter your account email to confirm deletion." }, { status: 400 });
     }
     const client = await getMongoClient();
