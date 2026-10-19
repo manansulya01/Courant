@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
+import { readBoundedBytes } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -18,10 +19,17 @@ export async function POST(request: Request) {
   if (!key) return NextResponse.json({ error: "Audio transcription needs OPENAI_API_KEY in the server environment." }, { status: 503, headers: noStore });
 
   try {
-    const declaredLength = Number(request.headers.get("content-length") || 0);
-    if (declaredLength > 21 * 1024 * 1024) return NextResponse.json({ error: "Please keep audio clips under 20 MB." }, { status: 413, headers: noStore });
-
-    const form = await request.formData();
+    const bounded = await readBoundedBytes(request, 21 * 1024 * 1024);
+    if (!bounded.ok) {
+      const error = bounded.status === 413 ? "Please keep audio clips under 20 MB." : "That recording could not be read. Please record again.";
+      return NextResponse.json({ error }, { status: bounded.status, headers: noStore });
+    }
+    const headers = new Headers(request.headers);
+    headers.delete("content-length");
+    const bodyBuffer = new ArrayBuffer(bounded.bytes.byteLength);
+    new Uint8Array(bodyBuffer).set(bounded.bytes);
+    const boundedRequest = new Request(request.url, { method: "POST", headers, body: bodyBuffer });
+    const form = await boundedRequest.formData();
     const file = form.get("audio");
     const languageValue = form.get("language");
     const language = typeof languageValue === "string" && /^[a-z]{2,3}(-[A-Z]{2})?$/.test(languageValue) ? languageValue : "en";
