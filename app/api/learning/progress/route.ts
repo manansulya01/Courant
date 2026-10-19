@@ -39,7 +39,8 @@ export async function POST(request: Request) {
     const lesson = typeof body.lesson === "string" ? body.lesson.trim().slice(0, 120) : "";
     const scenario = typeof body.scenario === "string" ? body.scenario.trim().slice(0, 120) : "Practice";
     const skill = typeof body.skill === "string" && ["conversation","pronunciation","listening","vocabulary","clarity","confidence","presentation"].includes(body.skill) ? body.skill : "conversation";
-    const minutes = Number.isInteger(body.minutes) ? Math.max(0, Math.min(180, body.minutes)) : 0;
+    const rawMinutes = body.minutes;
+    const minutes = typeof rawMinutes === "number" && Number.isInteger(rawMinutes) ? Math.max(0, Math.min(180, rawMinutes)) : 0;
     const rawScore = body.score;
     const score = typeof rawScore === "number" && Number.isFinite(rawScore) ? Math.max(0, Math.min(100, rawScore)) : null;
     const completed = body.completed === true;
