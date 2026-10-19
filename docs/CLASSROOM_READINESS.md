@@ -77,4 +77,4 @@ The live coach supports real-time spoken conversation through WebRTC, learner-le
 - [ ] Configure MongoDB Atlas, `AUTH_SECRET`, and production HTTPS.
 - [ ] Test voice call, mute, interruption, end-call cleanup, camera pause/resume, and recap generation on physical iPadOS/Safari and desktop browsers.
 - [ ] Confirm that provider usage limits, cost alerts, and data-processing/privacy notices are appropriate for the intended school and age group.
-- [ ] If a continuously animated AI teacher video is required, select and integrate a dedicated avatar/video provider; the current Realtime audio model does not generate that video stream.
+- [ ] Configure `HEYGEN_API_KEY` and `HEYGEN_AVATAR_ID` to enable the integrated HeyGen Streaming Avatar video path. The OpenAI Realtime model still handles English conversation; the avatar renders its spoken response as a synchronized animated video. Verify the provider account has Streaming Avatar access, avatar ID permission, usage budget, and required consent/privacy terms.
