@@ -80,6 +80,8 @@ export async function DELETE(request: Request) {
         await db.collection("assignmentSubmissions").deleteMany(
           { $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }, { session },
         );
+        // Remove outstanding recovery credentials in the same transaction as the account.
+        await db.collection("passwordResetTokens").deleteMany({ userId: user.id }, { session });
         await db.collection("classes").updateMany(
           { studentIds: user.id },
           [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$$studentId", user.id] } } }, updatedAt: new Date() } }],
