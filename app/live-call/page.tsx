@@ -173,8 +173,8 @@ export default function LiveCallPage() {
             setAvatarReady(true);
           }
         });
-        avatar.on(SessionEvent.SESSION_STATE_CHANGED, (event: { state?: string; detail?: { state?: string } }) => {
-          const nextState = event.state || event.detail?.state;
+        avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
+          const nextState = state;
           if (nextState === "disconnected" || nextState === "stopped" || nextState === "failed") {
             setAvatarReady(false);
             if (statusRef.current === "connected") setStatusText("The animated teacher video disconnected. End the call and reconnect.");
