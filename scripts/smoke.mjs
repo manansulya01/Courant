@@ -33,7 +33,8 @@ for (const path of [
   "/teacher", "/creator", "/practice-plan", "/forgot-password", "/reset-password", "/settings",
 ]) await check(path, 200);
 await check("/not-a-real-courant-route", 404);
-await check("/api/health", 503);
+const health = await check("/api/health", 503);
+if (health.headers.get("cache-control") !== "no-store") throw new Error("API responses must disable caching.");
 await check("/api/account", 401);
 await check("/api/learning/progress", 401);
 await check("/api/portfolio", 401);
