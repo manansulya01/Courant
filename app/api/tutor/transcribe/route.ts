@@ -26,7 +26,9 @@ export async function POST(request: Request) {
     }
     const headers = new Headers(request.headers);
     headers.delete("content-length");
-    const boundedRequest = new Request(request.url, { method: "POST", headers, body: bounded.bytes });
+    const bodyBuffer = new ArrayBuffer(bounded.bytes.byteLength);
+    new Uint8Array(bodyBuffer).set(bounded.bytes);
+    const boundedRequest = new Request(request.url, { method: "POST", headers, body: bodyBuffer });
     const form = await boundedRequest.formData();
     const file = form.get("audio");
     const languageValue = form.get("language");
