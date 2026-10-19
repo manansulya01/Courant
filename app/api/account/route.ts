@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
-import { getDatabase } from "@/lib/mongodb";
+import { getDatabase, getMongoClient } from "@/lib/mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,20 +51,40 @@ export async function DELETE(request: Request) {
     if (typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
       return NextResponse.json({ error: "Enter your account email to confirm deletion." }, { status: 400 });
     }
-    const db = await getDatabase();
-    const ownedClasses = await db.collection("classes").find({ teacherId: user.id }, { projection: { _id: 1 } }).toArray();
-    const ownedClassIds = ownedClasses.map((item) => item._id.toString());
-    const ownedAssignments = await db.collection("assignments").find({ $or: [{ teacherId: user.id }, { classId: { $in: ownedClassIds } }] }, { projection: { _id: 1 } }).toArray();
-    const ownedAssignmentIds = ownedAssignments.map((item) => item._id.toString());
-    await Promise.all([
-      db.collection("learningProgress").deleteMany({ userId: user.id }),
-      db.collection("portfolioItems").deleteMany({ userId: user.id }),
-      db.collection("assignmentSubmissions").deleteMany({ $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }),
-      db.collection("classes").updateMany({ studentIds: user.id }, [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$studentId", user.id] } } }, updatedAt: new Date() } }]),
-      db.collection("classes").deleteMany({ teacherId: user.id }),
-      db.collection("assignments").deleteMany({ _id: { $in: ownedAssignments.map((item) => item._id) } }),
-    ]);
-    await db.collection("users").deleteOne({ _id: new ObjectId(user.id) });
+    const client = await getMongoClient();
+    const session = client.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const db = client.db(process.env.MONGODB_DB || "courant");
+        const ownedClasses = await db.collection("classes").find(
+          { teacherId: user.id }, { projection: { _id: 1 }, session },
+        ).toArray();
+        const ownedClassIds = ownedClasses.map((item) => item._id.toString());
+        const ownedAssignments = await db.collection("assignments").find(
+          { $or: [{ teacherId: user.id }, { classId: { $in: ownedClassIds } }] },
+          { projection: { _id: 1 }, session },
+        ).toArray();
+        const ownedAssignmentIds = ownedAssignments.map((item) => item._id.toString());
+
+        await Promise.all([
+          db.collection("learningProgress").deleteMany({ userId: user.id }, { session }),
+          db.collection("portfolioItems").deleteMany({ userId: user.id }, { session }),
+          db.collection("assignmentSubmissions").deleteMany(
+            { $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }, { session },
+          ),
+          db.collection("classes").updateMany(
+            { studentIds: user.id },
+            [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$$studentId", user.id] } } }, updatedAt: new Date() } }],
+            { session },
+          ),
+          db.collection("classes").deleteMany({ teacherId: user.id }, { session }),
+          db.collection("assignments").deleteMany({ _id: { $in: ownedAssignments.map((item) => item._id) } }, { session }),
+        ]);
+        await db.collection("users").deleteOne({ _id: new ObjectId(user.id) }, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
     const response = NextResponse.json({ ok: true });
     response.cookies.set("courant_session", "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
     return response;
