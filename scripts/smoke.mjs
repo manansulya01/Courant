@@ -51,7 +51,7 @@ await check("/api/tutor/speech", 503, {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ text: "Hello there." }),
 });
-await check("/api/tutor/transcribe", 503, {
+await check("/api/tutor/realtime-session", 503, {\n  method: "POST",\n  headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },\n  body: JSON.stringify({ mode: "voice", scenario: "Smoke test" }),\n});\nawait check("/api/tutor/transcribe", 503, {
   method: "POST",
   headers: {},
 });
