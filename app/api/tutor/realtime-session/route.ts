@@ -48,10 +48,16 @@ export async function POST(request: Request) {
     const parsed = await readBoundedJson(request, 2_048);
     if (!parsed.ok) return fail(parsed.error, parsed.status);
     const mode = parsed.value.mode === "video" ? "video" : "voice";
+    const level = parsed.value.level === "beginner" || parsed.value.level === "advanced" ? parsed.value.level : "intermediate";
+    const levelGuidance: Record<"beginner" | "intermediate" | "advanced", string> = {
+      beginner: "Use short sentences, common vocabulary, one idea at a time, and patient pauses. Explain corrections in very simple language and invite the learner to repeat a natural version.",
+      intermediate: "Use natural everyday English. Explain the most useful grammar or phrasing improvement briefly, introduce occasional idioms in context, and encourage longer answers.",
+      advanced: "Use nuanced, natural English. Focus on precision, register, collocations, idiomatic phrasing, and conversational flow without overexplaining basic grammar.",
+    };
     const scenario = typeof parsed.value.scenario === "string"
       ? parsed.value.scenario.trim().replace(/[<>\u0000-\u001f]/g, "").slice(0, 160)
       : "a friendly everyday English conversation";
-    const instructions = `${coachInstructions}\n\nCALL MODE: ${mode}. CONVERSATION CONTEXT: ${scenario || "a friendly everyday English conversation"}.`;
+    const instructions = `${coachInstructions}\n\nLEARNER LEVEL: ${level}. ${levelGuidance[level]}\nCALL MODE: ${mode}. CONVERSATION CONTEXT: ${scenario || "a friendly everyday English conversation"}.`;
 
     let safetyIdentifier: string | null = null;
     try {
