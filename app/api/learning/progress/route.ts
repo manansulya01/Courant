@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 export const runtime = "nodejs";
 export async function GET() {
   const user = await getCurrentUser();
@@ -33,7 +33,9 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to save learning progress." }, { status: 401 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 8_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const lesson = typeof body.lesson === "string" ? body.lesson.trim().slice(0, 120) : "";
     const scenario = typeof body.scenario === "string" ? body.scenario.trim().slice(0, 120) : "Practice";
     const skill = typeof body.skill === "string" && ["conversation","pronunciation","listening","vocabulary","clarity","confidence","presentation"].includes(body.skill) ? body.skill : "conversation";
