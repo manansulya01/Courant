@@ -5,7 +5,7 @@ This checklist separates repository checks from launch tasks that require real c
 ## Eight workstreams
 
 ### 1. Build, lint, dependency and route checks
-- [x] CI installs dependencies, audits the full dependency tree (including build and test tooling) for high-severity vulnerabilities, runs ESLint, security unit tests, builds production assets and executes production smoke tests.
+- [x] CI blocks on high-severity production dependency vulnerabilities and separately reports full-tree findings. The full-tree report currently includes an unpatched development-tooling advisory for braces (GHSA-vfj7-8cjw-p6xm); it is report-only because no fixed release is published and the production-only audit remains blocking. CI also runs ESLint, security unit tests, production build, and production smoke tests.
 - [x] Smoke checks cover key public routes, security headers, expected auth boundaries, unavailable-provider responses, malformed/oversized coaching requests, and oversized streamed bodies without `Content-Length`.
 - [x] Learner JSON APIs use a shared streaming byte limit instead of trusting `Content-Length` or buffering unbounded request bodies.
 - [x] Node test suite covers valid objects, malformed JSON, non-object JSON, declared-size rejection, and streamed oversized bodies.
