@@ -87,7 +87,7 @@ test("accepts a body exactly at the byte limit", async () => {
   const body = JSON.stringify({ text: "é" });
   const bytes = new TextEncoder().encode(body);
   const request = new Request("http://localhost/api/test", { method: "POST", body });
-  assert.equal(bytes.byteLength, 12);
+  assert.equal(bytes.byteLength, 13);
   const result = await readBoundedJson(request, bytes.byteLength);
   assert.deepEqual(result, { ok: true, value: { text: "é" } });
 });
