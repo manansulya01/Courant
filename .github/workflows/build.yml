@@ -18,7 +18,11 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Audit production dependencies (blocking)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Report development dependency advisories
+        continue-on-error: true
+        run: npm audit --audit-level=high
       - run: npm run lint
       - run: npm run test:security
       - run: npm run build
