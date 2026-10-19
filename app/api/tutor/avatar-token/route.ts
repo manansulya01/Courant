@@ -24,31 +24,31 @@ export async function POST(request: Request) {
     return fail("Request protection is temporarily unavailable. Please try again.", 503);
   }
 
-  const apiKey = process.env.HEYGEN_API_KEY;
-  const avatarId = process.env.HEYGEN_AVATAR_ID;
+  const apiKey = process.env.LIVEAVATAR_API_KEY;
+  const avatarId = process.env.LIVEAVATAR_AVATAR_ID;
   if (!apiKey || !avatarId) {
-    return fail("Animated teacher video is not configured yet. Add HEYGEN_API_KEY and HEYGEN_AVATAR_ID on the server. Voice calls remain available.", 503);
+    return fail("Animated teacher video is not configured yet. Add LIVEAVATAR_API_KEY, LIVEAVATAR_AVATAR_ID, and LIVEAVATAR_CONTEXT_ID on the server. Voice calls remain available.", 503);
   }
 
   try {
-    const response = await fetch("https://api.heygen.com/v1/streaming.create_token", {
+    const response = await fetch("https://api.liveavatar.com/v1/sessions/token", {
       method: "POST",
-      headers: { "X-Api-Key": apiKey, "Content-Type": "application/json" },
-      body: "{}",
+      headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "FULL", avatar_id: avatarId, avatar_persona: { context_id: process.env.LIVEAVATAR_CONTEXT_ID, language: "en" } }),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
       const details = await response.text().catch(() => "");
-      console.error("HeyGen token request failed:", response.status, details.slice(0, 300));
-      return fail(response.status === 429 ? "The avatar service is busy. Please try again shortly." : "Could not start animated teacher video. Verify your HeyGen API access and avatar configuration.", response.status === 429 ? 429 : 502);
+      console.error("LiveAvatar session-token request failed:", response.status, details.slice(0, 300));
+      return fail(response.status === 429 ? "The avatar service is busy. Please try again shortly." : "Could not start animated teacher video. Verify your LiveAvatar API access, avatar ID, and context ID.", response.status === 429 ? 429 : 502);
     }
 
-    const result = await response.json() as { data?: { token?: unknown } };
-    if (typeof result.data?.token !== "string" || !result.data.token) {
+    const result = await response.json() as { data?: { session_token?: unknown } };
+    if (typeof result.data?.session_token !== "string" || !result.data.session_token) {
       return fail("The avatar service returned an invalid session token.", 502);
     }
-    return NextResponse.json({ token: result.data.token, avatarId }, { headers: { ...noStore, "X-Content-Type-Options": "nosniff" } });
+    return NextResponse.json({ sessionToken: result.data.session_token }, { headers: { ...noStore, "X-Content-Type-Options": "nosniff" } });
   } catch (error) {
     if (error instanceof Error && error.name === "TimeoutError") return fail("Animated teacher video took too long to start. Please try again.", 504);
     return fail("Could not start animated teacher video. Please try again.", 502);
