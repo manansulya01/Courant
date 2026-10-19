@@ -14,7 +14,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@heygen/streaming-avatar": "^2.1.1"
+    "@heygen/liveavatar-web-sdk": "^0.0.19"
   },
   "devDependencies": {
     "@types/node": "latest",
