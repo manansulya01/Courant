@@ -216,7 +216,11 @@ export default function LiveCallPage() {
         let payload: Record<string, unknown>;
         try { payload = JSON.parse(String(event.data)) as Record<string, unknown>; } catch { return; }
         const type = String(payload.type || "");
-        if (type === "input_audio_buffer.speech_started") setStatusText("Listening to you…");
+        if (type === "input_audio_buffer.speech_started") {
+          setStatusText("Listening to you…");
+          const avatar = avatarRef.current as { interrupt?: () => Promise<unknown> } | null;
+          if (mode === "video" && avatar?.interrupt) void avatar.interrupt().catch(() => undefined);
+        }
         if (type === "input_audio_buffer.speech_stopped") setStatusText("Working on a natural reply and a useful correction…");
         if (type === "conversation.item.input_audio_transcription.completed") {
           const transcript = typeof payload.transcript === "string" ? payload.transcript : "";
