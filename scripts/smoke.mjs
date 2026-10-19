@@ -85,4 +85,15 @@ await check("/api/coach", 413, {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ transcript: "x".repeat(20_001) }),
 });
+await check("/api/coach", 413, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"transcript":"' + "x".repeat(30_000)));
+      controller.close();
+    },
+  }),
+  duplex: "half",
+});
 console.log("Courant production smoke checks passed.");
