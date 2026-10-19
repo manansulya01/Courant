@@ -69,7 +69,7 @@ Never commit these values or expose them through `NEXT_PUBLIC_*`. Configure them
 
 ## Live AI teacher capability boundary
 
-The live coach supports real-time spoken conversation through WebRTC, learner-level adaptation, live transcription in the page, and an optional post-call learning recap. Video mode captures a local camera preview and sends a compressed still frame roughly every six seconds as visual context; it does **not** stream continuous video to the model or generate a live human teacher video. Camera permission is requested by the browser and can be paused independently during the call. The recap is generated only when the learner asks for it and remains in the page; the live transcript is not automatically persisted.
+The live coach supports real-time spoken conversation through WebRTC, learner-level adaptation, live transcription in the page, and an optional post-call learning recap. When LiveAvatar is configured, video mode renders a continuously animated AI teacher with synchronized speech. The learner camera remains a separate optional preview; compressed still frames may also be sent roughly every six seconds to the OpenAI coach for visual context. Without LiveAvatar credentials, animated teacher video is unavailable. Camera permission is requested by the browser and can be paused independently during the call. The recap is generated only when the learner asks for it and remains in the page; the live transcript is not automatically persisted.
 
 ### Required release verification
 
@@ -77,4 +77,4 @@ The live coach supports real-time spoken conversation through WebRTC, learner-le
 - [ ] Configure MongoDB Atlas, `AUTH_SECRET`, and production HTTPS.
 - [ ] Test voice call, mute, interruption, end-call cleanup, camera pause/resume, and recap generation on physical iPadOS/Safari and desktop browsers.
 - [ ] Confirm that provider usage limits, cost alerts, and data-processing/privacy notices are appropriate for the intended school and age group.
-- [ ] If a continuously animated AI teacher video is required, select and integrate a dedicated avatar/video provider; the current Realtime audio model does not generate that video stream.
+- [ ] Configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` to enable the integrated LiveAvatar video path. The OpenAI Realtime model still handles English conversation; the avatar renders its spoken response as a synchronized animated video. Verify the provider account has Streaming Avatar access, avatar ID permission, usage budget, and required consent/privacy terms.

@@ -28,10 +28,14 @@ export default function LiveCallPage() {
   const [level, setLevel] = useState<EnglishLevel>("intermediate");
   const [recap, setRecap] = useState("");
   const [recapBusy, setRecapBusy] = useState(false);
+  const [avatarReady, setAvatarReady] = useState(false);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const avatarVideoRef = useRef<HTMLVideoElement | null>(null);
+  const avatarRef = useRef<unknown>(null);
+  const lastAvatarTextRef = useRef("");
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -49,6 +53,11 @@ export default function LiveCallPage() {
   const endCall = useCallback(() => {
     statusRef.current = "ending";
     setStatus("ending");
+    const avatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+    if (avatar?.stop) void avatar.stop().catch(() => undefined);
+    avatarRef.current = null;
+    setAvatarReady(false);
+    if (avatarVideoRef.current) avatarVideoRef.current.srcObject = null;
     if (peerRef.current) {
       peerRef.current.ontrack = null;
       peerRef.current.onconnectionstatechange = null;
@@ -75,6 +84,8 @@ export default function LiveCallPage() {
     peerRef.current?.close();
     streamRef.current?.getTracks().forEach(track => track.stop());
     channelRef.current?.close();
+    const avatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+    if (avatar?.stop) void avatar.stop().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -116,6 +127,8 @@ export default function LiveCallPage() {
     setError("");
     setLines([]);
     setRecap("");
+    setAvatarReady(false);
+    lastAvatarTextRef.current = "";
     setStatus("connecting");
     statusRef.current = "connecting";
     setStatusText("Requesting microphone permission…");
@@ -146,11 +159,35 @@ export default function LiveCallPage() {
       if (!sessionResponse.ok) throw new Error(sessionData.error || "The live tutor could not start.");
       if (typeof sessionData.clientSecret !== "string") throw new Error("The live session was not configured correctly.");
 
+      if (mode === "video") {
+        setStatusText("Connecting your animated English teacher…");
+        const avatarTokenResponse = await fetch("/api/tutor/avatar-token", { method: "POST" });
+        const avatarTokenData = await avatarTokenResponse.json();
+        if (!avatarTokenResponse.ok) throw new Error(avatarTokenData.error || "Animated teacher video is unavailable.");
+        const { LiveAvatarSession, SessionEvent } = await import("@heygen/liveavatar-web-sdk");
+        const avatar = new LiveAvatarSession(avatarTokenData.sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
+        avatarRef.current = avatar;
+        avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
+          if (avatarVideoRef.current) {
+            avatar.attach(avatarVideoRef.current);
+            setAvatarReady(true);
+          }
+        });
+        avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
+          const nextState = state;
+          if (nextState === "disconnected" || nextState === "stopped" || nextState === "failed") {
+            setAvatarReady(false);
+            if (statusRef.current === "connected") setStatusText("The animated teacher video disconnected. End the call and reconnect.");
+          }
+        });
+        await avatar.start();
+      }
+
       const peer = new RTCPeerConnection();
       peerRef.current = peer;
       stream.getAudioTracks().forEach(track => peer.addTrack(track, stream!));
       peer.ontrack = event => {
-        if (remoteAudioRef.current) {
+        if (mode === "voice" && remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = event.streams[0];
           void remoteAudioRef.current.play().catch(() => undefined);
         }
@@ -159,7 +196,7 @@ export default function LiveCallPage() {
         if (peer.connectionState === "connected" && statusRef.current === "connecting") {
           statusRef.current = "connected";
           setStatus("connected");
-          setStatusText(mode === "video" ? "Live video practice is on. Courant receives a small camera snapshot every few seconds." : "Live voice practice is on. Speak naturally; Courant will respond and coach you.");
+          setStatusText(mode === "video" ? "Your animated teacher is live. Speak naturally; the teacher listens and responds." : "Live voice practice is on. Speak naturally; Courant will respond and coach you.");
         } else if ((peer.connectionState === "failed" || peer.connectionState === "disconnected") && statusRef.current === "connected") {
           setStatusText("The connection was interrupted. End the call and reconnect if needed.");
         }
@@ -168,10 +205,13 @@ export default function LiveCallPage() {
       const channel = peer.createDataChannel("oai-events");
       channelRef.current = channel;
       channel.onopen = () => {
-        setStatusText(mode === "video" ? "Connected. Say hello—Courant can hear you and receive periodic video snapshots." : "Connected. Say hello whenever you're ready.");
+        setStatusText(mode === "video" ? "Connected. Say hello to your animated English teacher." : "Connected. Say hello whenever you're ready.");
+        const openingInstruction = mode === "video"
+          ? "Your LiveAvatar has already delivered its configured opening greeting. Do not greet or introduce yourself again. Ask me one friendly opening question, then help me improve my English naturally as we talk."
+          : "Start our English practice call now. Briefly introduce yourself, ask me one friendly opening question, and help me improve my English naturally as we talk.";
         sendEvent({
           type: "conversation.item.create",
-          item: { type: "message", role: "user", content: [{ type: "input_text", text: "Start our English practice call now. Briefly introduce yourself, ask me one friendly opening question, and help me improve my English naturally as we talk." }] },
+          item: { type: "message", role: "user", content: [{ type: "input_text", text: openingInstruction }] },
         });
         sendEvent({ type: "response.create" });
       };
@@ -179,7 +219,11 @@ export default function LiveCallPage() {
         let payload: Record<string, unknown>;
         try { payload = JSON.parse(String(event.data)) as Record<string, unknown>; } catch { return; }
         const type = String(payload.type || "");
-        if (type === "input_audio_buffer.speech_started") setStatusText("Listening to you…");
+        if (type === "input_audio_buffer.speech_started") {
+          setStatusText("Listening to you…");
+          const avatar = avatarRef.current as { interrupt?: () => Promise<unknown> } | null;
+          if (mode === "video" && avatar?.interrupt) void avatar.interrupt().catch(() => undefined);
+        }
         if (type === "input_audio_buffer.speech_stopped") setStatusText("Working on a natural reply and a useful correction…");
         if (type === "conversation.item.input_audio_transcription.completed") {
           const transcript = typeof payload.transcript === "string" ? payload.transcript : "";
@@ -187,7 +231,14 @@ export default function LiveCallPage() {
         }
         if (type === "response.output_audio_transcript.done" || type === "response.audio_transcript.done") {
           const transcript = typeof payload.transcript === "string" ? payload.transcript : "";
-          if (transcript) addLine("courant", transcript);
+          if (transcript) {
+            addLine("courant", transcript);
+            if (mode === "video" && transcript !== lastAvatarTextRef.current) {
+              lastAvatarTextRef.current = transcript;
+              const avatar = avatarRef.current as { repeat: (text: string) => Promise<unknown> } | null;
+              if (avatar) void avatar.repeat(transcript).catch(() => setError("The animated teacher could not speak this reply. Please try reconnecting."));
+            }
+          }
         }
         if (type === "error") {
           const detail = payload.error && typeof payload.error === "object" ? (payload.error as Record<string, unknown>).message : null;
@@ -218,6 +269,11 @@ export default function LiveCallPage() {
       peerRef.current = null;
       channelRef.current?.close();
       channelRef.current = null;
+      const avatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+      if (avatar?.stop) void avatar.stop().catch(() => undefined);
+      avatarRef.current = null;
+      setAvatarReady(false);
+      if (avatarVideoRef.current) avatarVideoRef.current.srcObject = null;
       statusRef.current = "idle";
       setStatus("idle");
       setError(cause instanceof Error ? cause.message : "The live call could not start. Check your microphone permission and connection.");
@@ -288,13 +344,14 @@ export default function LiveCallPage() {
       <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
         <section className="overflow-hidden rounded-[28px] border border-[var(--line)] bg-[var(--surface)]">
           <div className="relative flex min-h-[350px] flex-col items-center justify-center overflow-hidden bg-[#171b1a] p-6 text-center text-white sm:min-h-[450px]">
+            {mode === "video" && <video ref={avatarVideoRef} autoPlay playsInline className={`absolute inset-0 h-full w-full object-cover transition-opacity ${avatarReady ? "opacity-100" : "opacity-0"}`} aria-label="Animated AI English teacher video"/>}
             <div className="absolute inset-0 opacity-30" aria-hidden="true" style={{ background: "radial-gradient(circle at 50% 45%, #738b7e 0, transparent 42%)" }}/>
             {mode === "video" && active ? <video ref={videoRef} autoPlay muted playsInline className="absolute bottom-4 right-4 z-20 h-32 w-24 rounded-2xl border border-white/30 object-cover shadow-xl sm:h-40 sm:w-32"/> : null}
-            <div className={`relative z-10 grid h-28 w-28 place-items-center rounded-full border border-white/15 bg-white/10 shadow-2xl backdrop-blur-sm sm:h-36 sm:w-36 ${status === "connected" ? "animate-pulse" : ""}`}>
+            {!avatarReady && <div className={`relative z-10 grid h-28 w-28 place-items-center rounded-full border border-white/15 bg-white/10 shadow-2xl backdrop-blur-sm sm:h-36 sm:w-36 ${status === "connected" ? "animate-pulse" : ""}`}>
               <div className="grid h-20 w-20 place-items-center rounded-full bg-[#e8eee8] text-3xl text-[#263b32] sm:h-28 sm:w-28" aria-hidden="true">✳</div>
-            </div>
-            <p className="relative z-10 mt-6 text-xl font-medium">{status === "connected" ? "Courant is here." : status === "connecting" ? "Setting up your call…" : "Your English conversation partner"}</p>
-            <p className="relative z-10 mt-2 max-w-sm text-sm leading-6 text-white/70">{statusText}</p>
+            </div>}
+            <p className="relative z-10 mt-6 text-xl font-medium">{mode === "video" && avatarReady ? "Your English teacher is here." : status === "connected" ? "Courant is here." : status === "connecting" ? "Setting up your call…" : "Your English conversation partner"}</p>
+            <p className={`relative z-10 mt-2 max-w-sm text-sm leading-6 text-white/70 ${avatarReady ? "rounded-full bg-black/55 px-3 py-1" : ""}`}>{statusText}</p>
             {mode === "video" && active && <span className="absolute left-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider">{cameraEnabled ? "Camera on" : "Camera paused"}</span>}
             {status === "connected" && <span className="absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"><span className="h-2 w-2 rounded-full bg-emerald-400"/> Live</span>}
           </div>
@@ -345,7 +402,7 @@ export default function LiveCallPage() {
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-[var(--line)] p-4"><p className="text-sm font-semibold">Natural corrections</p><p className="mt-1 text-xs leading-5 text-[var(--muted)]">Useful grammar and phrasing tips woven into the conversation—not a wall of red marks.</p></div>
         <div className="rounded-2xl border border-[var(--line)] p-4"><p className="text-sm font-semibold">Talk at your pace</p><p className="mt-1 text-xs leading-5 text-[var(--muted)]">Speak, pause, ask for a repeat, or interrupt the AI. Switch to stricter corrections when you want.</p></div>
-        <div className="rounded-2xl border border-[var(--line)] p-4"><p className="text-sm font-semibold">Video with consent</p><p className="mt-1 text-xs leading-5 text-[var(--muted)]">Video mode sends a compressed camera snapshot every six seconds for visual context; it is not a continuous video stream to the model.</p></div>
+        <div className="rounded-2xl border border-[var(--line)] p-4"><p className="text-sm font-semibold">Video with consent</p><p className="mt-1 text-xs leading-5 text-[var(--muted)]">Video mode shows a continuously animated AI teacher when the avatar provider is configured; your own camera preview is optional.</p></div>
       </div>
       <canvas ref={canvasRef} className="hidden" aria-hidden="true"/>
       <audio ref={remoteAudioRef} autoPlay className="hidden"/>
