@@ -81,3 +81,42 @@ test("bounded byte reader rejects a streamed audio-sized body without Content-Le
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.status, 413);
 });
+
+
+test("accepts a body exactly at the byte limit", async () => {
+  const body = JSON.stringify({ text: "é" });
+  const bytes = new TextEncoder().encode(body);
+  const request = new Request("http://localhost/api/test", { method: "POST", body });
+  assert.equal(bytes.byteLength, 13);
+  const result = await readBoundedJson(request, bytes.byteLength);
+  assert.deepEqual(result, { ok: true, value: { text: "é" } });
+});
+
+test("counts UTF-8 bytes rather than JavaScript characters", async () => {
+  const body = JSON.stringify({ text: "🌍" });
+  const bytes = new TextEncoder().encode(body);
+  const request = new Request("http://localhost/api/test", { method: "POST", body });
+  const result = await readBoundedJson(request, bytes.byteLength - 1);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.status, 413);
+});
+
+test("rejects an empty body with a bounded client error", async () => {
+  const request = new Request("http://localhost/api/test", { method: "POST", body: "" });
+  const result = await readBoundedJson(request, 32);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.status, 400);
+});
+
+test("handles a stream that errors while being read", async () => {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("{"));
+      controller.error(new Error("client disconnected"));
+    },
+  });
+  const request = new Request("http://localhost/api/test", { method: "POST", body, duplex: "half" });
+  const result = await readBoundedJson(request, 32);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.status, 400);
+});
