@@ -22,7 +22,6 @@ export default function LiveCallPage() {
   const [scenario, setScenario] = useState(starters[0].value);
   const [lines, setLines] = useState<Line[]>([]);
   const [muted, setMuted] = useState(false);
-  const [cameraOn, setCameraOn] = useState(true);
   const [strictCorrections, setStrictCorrections] = useState(false);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
