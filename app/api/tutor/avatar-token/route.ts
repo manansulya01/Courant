@@ -26,7 +26,8 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.LIVEAVATAR_API_KEY;
   const avatarId = process.env.LIVEAVATAR_AVATAR_ID;
-  if (!apiKey || !avatarId) {
+  const contextId = process.env.LIVEAVATAR_CONTEXT_ID;
+  if (!apiKey || !avatarId || !contextId) {
     return fail("Animated teacher video is not configured yet. Add LIVEAVATAR_API_KEY, LIVEAVATAR_AVATAR_ID, and LIVEAVATAR_CONTEXT_ID on the server. Voice calls remain available.", 503);
   }
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     const response = await fetch("https://api.liveavatar.com/v1/sessions/token", {
       method: "POST",
       headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "FULL", avatar_id: avatarId, avatar_persona: { context_id: process.env.LIVEAVATAR_CONTEXT_ID, language: "en" } }),
+      body: JSON.stringify({ mode: "FULL", avatar_id: avatarId, avatar_persona: { context_id: contextId, language: "en" } }),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
