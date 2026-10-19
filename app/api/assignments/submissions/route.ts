@@ -8,7 +8,7 @@ import { readBoundedJson } from "@/lib/bounded-json";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to view submissions." }, { status: 401 });
   try {
