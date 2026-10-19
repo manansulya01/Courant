@@ -123,7 +123,7 @@ export default function TalkPage() {
           <h1 className="mt-3 text-4xl font-medium tracking-[-.055em] sm:text-5xl">Just talk.</h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted)]">Have a natural English conversation. Speak, listen to a warm spoken reply, and keep going. Mistakes are welcome here.</p>
         </div>
-        <button onClick={reset} className="w-fit rounded-full border border-[var(--line)] px-4 py-2.5 text-xs font-semibold">New conversation ↻</button>
+        <div className="flex flex-wrap gap-2"><a href="/live-call" className="w-fit rounded-full bg-[var(--accent)] px-4 py-2.5 text-xs font-semibold text-white">Live voice / video ↗</a><button onClick={reset} className="w-fit rounded-full border border-[var(--line)] px-4 py-2.5 text-xs font-semibold">New conversation ↻</button></div>
       </div>
       <section aria-label="Conversation" aria-live="polite" className="mt-6 flex min-h-[360px] flex-col rounded-[24px] border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-7">
         {!turns.length && <div className="m-auto max-w-md py-10 text-center">
