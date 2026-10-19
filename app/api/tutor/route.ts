@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 type Turn = { role: "user" | "assistant"; content: string };
-const MAX_BODY_BYTES = 6_000_000;
 const MAX_MESSAGE_LENGTH = 1800;
 const MAX_HISTORY_TURNS = 10;
 const MAX_HISTORY_TURN_LENGTH = 1200;
@@ -36,22 +36,13 @@ export async function POST(request: Request) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return errorResponse("Courant AI is not connected yet. Add OPENAI_API_KEY to the server environment to enable the AI tutor.", 503);
 
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > MAX_BODY_BYTES) return errorResponse("That request is too large. Choose a smaller picture or send a shorter message.", 413);
-
   try {
-    const rawBody = await request.text();
-    if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
-      return errorResponse("That request is too large. Choose a smaller picture or send a shorter message.", 413);
-    }
-
-    let body: unknown;
-    try { body = JSON.parse(rawBody); } catch { return errorResponse("That request could not be read. Please try again.", 400); }
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return errorResponse("Please send a message or a picture to begin.", 400);
-    }
-
-    const input = body as Record<string, unknown>;
+    const parsed = await readBoundedJson(request, 6_000_000);
+    if (!parsed.ok) return errorResponse(
+      parsed.status === 413 ? "That request is too large. Choose a smaller picture or send a shorter message." : "That request could not be read. Please try again.",
+      parsed.status,
+    );
+    const input = parsed.value;
     const message = typeof input.message === "string" ? input.message.trim().slice(0, MAX_MESSAGE_LENGTH) : "";
     const scenario = typeof input.scenario === "string" ? input.scenario.trim().slice(0, 120) : "Everyday conversation";
     const history: Turn[] = Array.isArray(input.history)

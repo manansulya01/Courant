@@ -3,11 +3,12 @@ import { ObjectId } from "mongodb";
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getDatabase } from "@/lib/mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to view submissions." }, { status: 401 });
   try {
@@ -38,7 +39,9 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Sign in to submit work." }, { status: 401 });
   if (user.role !== "student") return NextResponse.json({ error: "Only student accounts can submit assignments." }, { status: 403 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 16_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const assignmentId = typeof body.assignmentId === "string" && ObjectId.isValid(body.assignmentId) ? body.assignmentId : "";
     const content = typeof body.content === "string" ? body.content.trim().slice(0, 12000) : "";
     if (!assignmentId || content.length < 1) return NextResponse.json({ error: "Choose an assignment and enter your work." }, { status: 400 });
@@ -73,7 +76,9 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Sign in to review work." }, { status: 401 });
   if (!["teacher", "admin"].includes(user.role)) return NextResponse.json({ error: "Teacher permissions are required." }, { status: 403 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 8_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     if (typeof body.id !== "string" || !ObjectId.isValid(body.id)) return NextResponse.json({ error: "Invalid submission." }, { status: 400 });
     const feedback = typeof body.feedback === "string" ? body.feedback.trim().slice(0, 3000) : "";
     const score = body.score === null || body.score === "" || body.score === undefined ? null : Number(body.score);

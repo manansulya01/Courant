@@ -3,53 +3,10 @@ import { ObjectId } from "mongodb";
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getDatabase, getMongoClient } from "@/lib/mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-async function readBoundedJson(request: Request, maxBytes = 4_096): Promise<unknown | NextResponse> {
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > maxBytes) {
-    return NextResponse.json({ error: "Request is too large." }, { status: 413, headers: { "Cache-Control": "no-store" } });
-  }
-  if (!request.body) {
-    return NextResponse.json({ error: "Enter your account email to confirm deletion." }, { status: 400, headers: { "Cache-Control": "no-store" } });
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel();
-        return NextResponse.json({ error: "Request is too large." }, { status: 413, headers: { "Cache-Control": "no-store" } });
-      }
-      chunks.push(value);
-    }
-  } catch {
-    return NextResponse.json({ error: "Could not read request body." }, { status: 400, headers: { "Cache-Control": "no-store" } });
-  }
-
-  try {
-    const bytes = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
-    if (!body || Array.isArray(body) || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request body." }, { status: 400, headers: { "Cache-Control": "no-store" } });
-    }
-    return body;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400, headers: { "Cache-Control": "no-store" } });
-  }
-}
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -64,7 +21,11 @@ export async function GET() {
       user.role === "teacher" || user.role === "admin" ? db.collection("classes").find({ teacherId: user.id }).limit(500).toArray() : Promise.resolve([]),
       user.role === "teacher" || user.role === "admin" ? db.collection("assignments").find({ teacherId: user.id }).limit(2000).toArray() : Promise.resolve([]),
     ]);
-    const clean = (items: Array<Record<string, unknown>>) => items.map(({ _id, passwordHash, ...item }) => ({ ...item, id: _id instanceof ObjectId ? _id.toString() : undefined }));
+    const clean = (items: Array<Record<string, unknown>>) => items.map((document) => {
+      const { _id, ...item } = document;
+      delete item.passwordHash;
+      return { ...item, id: _id instanceof ObjectId ? _id.toString() : undefined };
+    });
     return NextResponse.json({
       exportedAt: new Date().toISOString(),
       profile: user,
@@ -91,9 +52,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
   }
   try {
-    const body = await readBoundedJson(request);
-    if (body instanceof NextResponse) return body;
-    if (!body || Array.isArray(body) || typeof body !== "object" || !("confirmEmail" in body) || typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
+    const parsed = await readBoundedJson(request, 4_096);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
+    if (typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
       return NextResponse.json({ error: "Enter your account email to confirm deletion." }, { status: 400 });
     }
     const client = await getMongoClient();

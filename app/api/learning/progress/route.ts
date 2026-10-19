@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 export const runtime = "nodejs";
 export async function GET() {
   const user = await getCurrentUser();
@@ -33,12 +33,16 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to save learning progress." }, { status: 401 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 8_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const lesson = typeof body.lesson === "string" ? body.lesson.trim().slice(0, 120) : "";
     const scenario = typeof body.scenario === "string" ? body.scenario.trim().slice(0, 120) : "Practice";
     const skill = typeof body.skill === "string" && ["conversation","pronunciation","listening","vocabulary","clarity","confidence","presentation"].includes(body.skill) ? body.skill : "conversation";
-    const minutes = Number.isInteger(body.minutes) ? Math.max(0, Math.min(180, body.minutes)) : 0;
-    const score = Number.isFinite(body.score) ? Math.max(0, Math.min(100, Number(body.score))) : null;
+    const rawMinutes = body.minutes;
+    const minutes = typeof rawMinutes === "number" && Number.isInteger(rawMinutes) ? Math.max(0, Math.min(180, rawMinutes)) : 0;
+    const rawScore = body.score;
+    const score = typeof rawScore === "number" && Number.isFinite(rawScore) ? Math.max(0, Math.min(100, rawScore)) : null;
     const completed = body.completed === true;
     if (!lesson) return NextResponse.json({ error: "A lesson name is required." }, { status: 400 });
     const db = await getDatabase();

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export const maxDuration = 5;
 
-const MAX_BODY_BYTES = 24_000;
 const MAX_TRANSCRIPT_LENGTH = 20_000;
 const noStore = { "Cache-Control": "no-store" };
 
@@ -14,30 +14,14 @@ function errorResponse(error: string, status: number) {
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return errorResponse("Request origin was not accepted.", 403);
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > MAX_BODY_BYTES) return errorResponse("That transcript is too long. Please submit a shorter practice answer.", 413);
-
-  let rawBody: string;
-  try {
-    rawBody = await request.text();
-  } catch {
-    return errorResponse("Please send a valid practice transcript.", 400);
+  const parsed = await readBoundedJson(request, 24_000);
+  if (!parsed.ok) {
+    return errorResponse(
+      parsed.status === 413 ? "That transcript is too long. Please submit a shorter practice answer." : "Please send a valid practice transcript.",
+      parsed.status,
+    );
   }
-  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
-    return errorResponse("That transcript is too long. Please submit a shorter practice answer.", 413);
-  }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(rawBody);
-  } catch {
-    return errorResponse("Please send a valid practice transcript.", 400);
-  }
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return errorResponse("Please send a valid practice transcript.", 400);
-  }
-
-  const input = body as Record<string, unknown>;
+  const input = parsed.value;
   const transcript = typeof input.transcript === "string" ? input.transcript.trim() : "";
   if (!transcript) return errorResponse("A transcript is required.", 400);
   if (transcript.length > MAX_TRANSCRIPT_LENGTH) {
