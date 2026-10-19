@@ -26,7 +26,9 @@ export async function readBoundedBytes(request: Request, maxBytes: number): Prom
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
-        await reader.cancel();
+        // Cancellation is best-effort: a broken client stream must still produce
+        // a controlled 413 response instead of escaping as an unhandled rejection.
+        try { await reader.cancel(); } catch { /* stream already errored or closed */ }
         return { ok: false, status: 413, error: "Request is too large." };
       }
       chunks.push(value);
