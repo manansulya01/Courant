@@ -190,7 +190,7 @@ export default function LiveCallPage() {
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      const answerResponse = await fetch("https://api.openai.com/v1/realtime/calls?model=gpt-realtime", {
+      const answerResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
         method: "POST",
         headers: { Authorization: `Bearer ${sessionData.clientSecret}`, "Content-Type": "application/sdp" },
         body: offer.sdp,
