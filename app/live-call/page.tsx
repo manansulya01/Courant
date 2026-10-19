@@ -258,7 +258,7 @@ export default function LiveCallPage() {
         <section className="overflow-hidden rounded-[28px] border border-[var(--line)] bg-[var(--surface)]">
           <div className="relative flex min-h-[350px] flex-col items-center justify-center overflow-hidden bg-[#171b1a] p-6 text-center text-white sm:min-h-[450px]">
             <div className="absolute inset-0 opacity-30" aria-hidden="true" style={{ background: "radial-gradient(circle at 50% 45%, #738b7e 0, transparent 42%)" }}/>
-            {mode === "video" && active ? <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover"/> : null}
+            {mode === "video" && active ? <video ref={videoRef} autoPlay muted playsInline className="absolute bottom-4 right-4 z-20 h-32 w-24 rounded-2xl border border-white/30 object-cover shadow-xl sm:h-40 sm:w-32"/> : null}
             <div className={`relative z-10 grid h-28 w-28 place-items-center rounded-full border border-white/15 bg-white/10 shadow-2xl backdrop-blur-sm sm:h-36 sm:w-36 ${status === "connected" ? "animate-pulse" : ""}`}>
               <div className="grid h-20 w-20 place-items-center rounded-full bg-[#e8eee8] text-3xl text-[#263b32] sm:h-28 sm:w-28" aria-hidden="true">✳</div>
             </div>
