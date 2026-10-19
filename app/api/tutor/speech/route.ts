@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -18,10 +19,9 @@ export async function POST(request: Request) {
   if (!key) return NextResponse.json({ error: "AI voice needs OPENAI_API_KEY in the server environment." }, { status: 503, headers: noStore });
 
   try {
-    const body: unknown = await request.json();
-    const text = body && typeof body === "object" && typeof (body as { text?: unknown }).text === "string"
-      ? (body as { text: string }).text.trim().slice(0, 2500)
-      : "";
+    const parsed = await readBoundedJson(request, 16_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: noStore });
+    const text = typeof parsed.value.text === "string" ? parsed.value.text.trim().slice(0, 2500) : "";
     if (!text) return NextResponse.json({ error: "Text is required." }, { status: 400, headers: noStore });
     if (text.length < 2) return NextResponse.json({ error: "Please provide a little more text to speak." }, { status: 400, headers: noStore });
 
