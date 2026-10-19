@@ -3,6 +3,7 @@ import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 export const runtime = "nodejs";
 export async function GET() {
   const user = await getCurrentUser();
@@ -23,7 +24,9 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to save portfolio work." }, { status: 401 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 16_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const title = typeof body.title === "string" ? body.title.trim().slice(0,120) : "";
     const kind = typeof body.kind === "string" ? body.kind.trim().slice(0,40) : "Writing";
     const content = typeof body.content === "string" ? body.content.trim().slice(0,12000) : "";
@@ -46,7 +49,9 @@ export async function PATCH(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to update portfolio work." }, { status: 401 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 16_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     if (typeof body.id !== "string" || !ObjectId.isValid(body.id)) return NextResponse.json({ error: "Invalid project." }, { status:400 });
     const update: Record<string, unknown> = { updatedAt:new Date() };
     if (typeof body.title === "string" && body.title.trim()) update.title=body.title.trim().slice(0,120);
@@ -69,7 +74,9 @@ export async function DELETE(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in to delete portfolio work." }, { status:401 });
   try {
-    const body=await request.json();
+    const parsed = await readBoundedJson(request, 4_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     if (typeof body.id!=="string" || !ObjectId.isValid(body.id)) return NextResponse.json({error:"Invalid project."},{status:400});
     const result=await (await getDatabase()).collection("portfolioItems").deleteOne({_id:new ObjectId(body.id),userId:user.id});
     if (!result.deletedCount) return NextResponse.json({error:"Project not found."},{status:404});
