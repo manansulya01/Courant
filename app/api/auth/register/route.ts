@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getDatabase } from "@/lib/mongodb";
 import { hashPassword, safeUser, setSession, type Role } from "@/lib/auth";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -13,7 +14,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503 });
   }
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 8_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const name = typeof body.name === "string" ? body.name.trim().slice(0, 80) : "";
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body.password === "string" ? body.password : "";
