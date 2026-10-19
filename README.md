@@ -12,14 +12,14 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 6. Optionally set `COURANT_TEACHER_INVITE_CODE`; teacher registration requires this invitation code.
 7. Add an OpenAI API key to `OPENAI_API_KEY` to enable AI conversation, image understanding, audio transcription, and spoken replies. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
 8. For live voice/video calls, ensure the OpenAI project has Realtime API access. Optional settings: `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_TRANSCRIPTION_MODEL`, and `OPENAI_REALTIME_VOICE`. The app issues short-lived client secrets from a same-origin, rate-limited server route; the permanent API key never reaches the browser.
-9. To show a continuously animated AI teacher during video calls, configure ``LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` from your LiveAvatar account. The API key stays server-side; a short-lived session token is issued to the browser.
+9. To show a continuously animated AI teacher during video calls, configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` from your LiveAvatar account. The API key stays server-side; a short-lived session token is issued to the browser.
 10. Run `npm run dev` and open `http://localhost:3000`.
 
 ## Main experiences
 
 - `/labs` and `/labs/[slug]` — scenario library and AI practice room
 - `/talk` — open-ended spoken English conversation with push-to-talk, transcription, natural spoken replies, replay, and text fallback
-- `/live-call` — real-time English voice practice and, when HeyGen is configured, an animated streaming AI teacher with live spoken responses, camera preview, beginner/intermediate/advanced coaching, and optional post-call feedback
+- `/live-call` — real-time English voice practice and, when LiveAvatar is configured, an animated streaming AI teacher with live spoken responses, camera preview, beginner/intermediate/advanced coaching, and optional post-call feedback
 - `/practice-plan` — configurable practice plan
 - `/signup` and `/login` — account creation and sign-in
 - `/dashboard` — learner progress, class membership, assignments, and saved sessions
@@ -41,7 +41,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `/api/assignments/submissions` — student submissions and teacher review
 - `/api/account` — export personal data or delete an account and associated records
 
-The application uses MongoDB collections for users, learning progress, classes, assignments, assignment submissions, rate limits, and portfolio items. Passwords are hashed using Node.js scrypt; sessions use signed, HttpOnly cookies. The app does not save chat transcripts or raw audio recordings; learners can explicitly save lesson metadata to their journal. In the turn-based practice room, learners can speak through push-to-talk recording, review the transcription before sending it, hear natural spoken replies, and replay the latest reply. Live calls use WebRTC for low-latency speech and return spoken corrections during the conversation. When HeyGen Streaming Avatar is configured, video mode renders the AI teacher as a live animated video stream; the learner's own camera remains optional and visual snapshots sent to the language model are separate. Without HeyGen configuration, live voice remains available but animated teacher video is unavailable. Camera/microphone access requires explicit browser permission and HTTPS in production. A browser speech-synthesis fallback may be used if the configured voice service is unavailable.
+The application uses MongoDB collections for users, learning progress, classes, assignments, assignment submissions, rate limits, and portfolio items. Passwords are hashed using Node.js scrypt; sessions use signed, HttpOnly cookies. The app does not save chat transcripts or raw audio recordings; learners can explicitly save lesson metadata to their journal. In the turn-based practice room, learners can speak through push-to-talk recording, review the transcription before sending it, hear natural spoken replies, and replay the latest reply. Live calls use WebRTC for low-latency speech and return spoken corrections during the conversation. When LiveAvatar is configured, video mode renders the AI teacher as a live animated video stream; the learner's own camera remains optional and visual snapshots sent to the language model are separate. Without HeyGen configuration, live voice remains available but animated teacher video is unavailable. Camera/microphone access requires explicit browser permission and HTTPS in production. A browser speech-synthesis fallback may be used if the configured voice service is unavailable.
 
 ## Before production or school rollout
 
