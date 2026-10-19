@@ -21,7 +21,11 @@ export async function GET() {
       user.role === "teacher" || user.role === "admin" ? db.collection("classes").find({ teacherId: user.id }).limit(500).toArray() : Promise.resolve([]),
       user.role === "teacher" || user.role === "admin" ? db.collection("assignments").find({ teacherId: user.id }).limit(2000).toArray() : Promise.resolve([]),
     ]);
-    const clean = (items: Array<Record<string, unknown>>) => items.map(({ _id, passwordHash, ...item }) => ({ ...item, id: _id instanceof ObjectId ? _id.toString() : undefined }));
+    const clean = (items: Array<Record<string, unknown>>) => items.map((document) => {
+      const { _id, ...item } = document;
+      delete item.passwordHash;
+      return { ...item, id: _id instanceof ObjectId ? _id.toString() : undefined };
+    });
     return NextResponse.json({
       exportedAt: new Date().toISOString(),
       profile: user,
