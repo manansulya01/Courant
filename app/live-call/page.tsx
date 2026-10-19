@@ -23,6 +23,7 @@ export default function LiveCallPage() {
   const [scenario, setScenario] = useState(starters[0].value);
   const [lines, setLines] = useState<Line[]>([]);
   const [muted, setMuted] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
   const [strictCorrections, setStrictCorrections] = useState(false);
   const [level, setLevel] = useState<EnglishLevel>("intermediate");
   const [recap, setRecap] = useState("");
@@ -64,6 +65,7 @@ export default function LiveCallPage() {
     if (videoRef.current) videoRef.current.srcObject = null;
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
     setMuted(false);
+    setCameraEnabled(false);
     setStatus("idle");
     statusRef.current = "idle";
     setStatusText("Call ended. Your conversation stays on this screen until you leave or start a new call.");
@@ -81,7 +83,7 @@ export default function LiveCallPage() {
       const channel = channelRef.current;
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!channel || channel.readyState !== "open" || !video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || channel.bufferedAmount > 900_000) return;
+      if (!channel || channel.readyState !== "open" || !video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || channel.bufferedAmount > 900_000 || !streamRef.current?.getVideoTracks().some(track => track.enabled)) return;
       const ratio = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
       canvas.width = 640;
       canvas.height = Math.round(640 / ratio);
@@ -128,6 +130,7 @@ export default function LiveCallPage() {
         video: mode === "video" ? { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } : false,
       });
       streamRef.current = stream;
+      setCameraEnabled(mode === "video");
       if (videoRef.current && mode === "video") {
         videoRef.current.srcObject = stream;
         void videoRef.current.play().catch(() => undefined);
@@ -245,6 +248,13 @@ export default function LiveCallPage() {
     finally { setRecapBusy(false); }
   }
 
+  function toggleCamera() {
+    const next = !cameraEnabled;
+    streamRef.current?.getVideoTracks().forEach(track => { track.enabled = next; });
+    setCameraEnabled(next);
+    setStatusText(next ? "Camera on. Courant may receive occasional snapshots for visual context." : "Camera paused. Your microphone call continues; no new camera snapshots are sent.");
+  }
+
   function clearTranscript() {
     setLines([]);
     setError("");
@@ -285,7 +295,7 @@ export default function LiveCallPage() {
             </div>
             <p className="relative z-10 mt-6 text-xl font-medium">{status === "connected" ? "Courant is here." : status === "connecting" ? "Setting up your call…" : "Your English conversation partner"}</p>
             <p className="relative z-10 mt-2 max-w-sm text-sm leading-6 text-white/70">{statusText}</p>
-            {mode === "video" && active && <span className="absolute left-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider">Camera on</span>}
+            {mode === "video" && active && <span className="absolute left-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider">{cameraEnabled ? "Camera on" : "Camera paused"}</span>}
             {status === "connected" && <span className="absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"><span className="h-2 w-2 rounded-full bg-emerald-400"/> Live</span>}
           </div>
 
@@ -303,6 +313,7 @@ export default function LiveCallPage() {
               <p className="text-center text-xs leading-5 text-[var(--muted)]">Your browser will ask for {mode === "video" ? "microphone and camera" : "microphone"} access. The call uses an encrypted WebRTC connection and a short-lived session token.</p>
             </div> : <div className="flex flex-wrap justify-center gap-2">
               <button type="button" onClick={toggleMute} disabled={status !== "connected"} className="rounded-full border border-[var(--line)] px-4 py-3 text-sm font-medium disabled:opacity-40">{muted ? "Unmute microphone" : "Mute microphone"}</button>
+              {mode === "video" && <button type="button" onClick={toggleCamera} disabled={status !== "connected"} className="rounded-full border border-[var(--line)] px-4 py-3 text-sm font-medium disabled:opacity-40">{cameraEnabled ? "Pause camera" : "Resume camera"}</button>}
               <button type="button" onClick={clearTranscript} className="rounded-full border border-[var(--line)] px-4 py-3 text-sm font-medium">Clear transcript</button>
               <button type="button" onClick={endCall} className="rounded-full bg-[#9d403c] px-5 py-3 text-sm font-semibold text-white">End call</button>
             </div>}
