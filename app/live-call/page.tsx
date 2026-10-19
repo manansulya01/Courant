@@ -140,7 +140,7 @@ export default function LiveCallPage() {
 
       const peer = new RTCPeerConnection();
       peerRef.current = peer;
-      stream.getTracks().forEach(track => peer.addTrack(track, stream!));
+      stream.getAudioTracks().forEach(track => peer.addTrack(track, stream!));
       peer.ontrack = event => {
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = event.streams[0];
