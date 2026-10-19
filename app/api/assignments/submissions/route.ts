@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getDatabase } from "@/lib/mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,9 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Sign in to submit work." }, { status: 401 });
   if (user.role !== "student") return NextResponse.json({ error: "Only student accounts can submit assignments." }, { status: 403 });
   try {
-    const body = await request.json();
+    const parsed = await readBoundedJson(request, 16_000);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const body = parsed.value;
     const assignmentId = typeof body.assignmentId === "string" && ObjectId.isValid(body.assignmentId) ? body.assignmentId : "";
     const content = typeof body.content === "string" ? body.content.trim().slice(0, 12000) : "";
     if (!assignmentId || content.length < 1) return NextResponse.json({ error: "Choose an assignment and enter your work." }, { status: 400 });
