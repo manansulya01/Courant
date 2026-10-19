@@ -2,56 +2,9 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase } from "@/lib/mongodb";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
+import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
-
-async function readCode(request: Request): Promise<string | NextResponse> {
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > 1_024) {
-    return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-  }
-  if (!request.body) {
-    return NextResponse.json({ error: "Enter the four-character class code." }, { status: 400 });
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > 1_024) {
-        await reader.cancel();
-        return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-      }
-      chunks.push(value);
-    }
-  } catch {
-    return NextResponse.json({ error: "Could not read request body." }, { status: 400 });
-  }
-
-  try {
-    const bytes = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
-    if (!body || Array.isArray(body) || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-    }
-    const code = "code" in body && typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
-    if (!/^[A-Z0-9]{4}$/.test(code)) {
-      return NextResponse.json({ error: "Enter the four-character class code." }, { status: 400 });
-    }
-    return code;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
-  }
-}
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) {
@@ -76,8 +29,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only student accounts can join a class." }, { status: 403 });
   }
 
-  const code = await readCode(request);
-  if (code instanceof NextResponse) return code;
+  const parsed = await readBoundedJson(request, 1_024);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+  const code = typeof parsed.value.code === "string" ? parsed.value.code.trim().toUpperCase() : "";
+  if (!/^[A-Z0-9]{4}$/.test(code)) return NextResponse.json({ error: "Enter the four-character class code." }, { status: 400 });
 
   try {
     const db = await getDatabase();
