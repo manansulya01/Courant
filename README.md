@@ -32,6 +32,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `POST /api/tutor/transcribe` — converts recorded speech to text
 - `POST /api/tutor/speech` — returns a spoken audio reply
 - `POST /api/tutor/realtime-session` — issues a short-lived Realtime API client secret for WebRTC calls
+- `POST /api/tutor/avatar-token` — issues a short-lived LiveAvatar session token for animated teacher video; the provider API key remains server-side
 - `GET /api/health` — reports database readiness and whether server-side AI/auth configuration is present
 - `/api/learning/progress` — save/read authenticated learner progress
 - `/api/portfolio` — authenticated portfolio CRUD
