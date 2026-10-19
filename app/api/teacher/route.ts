@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { getCurrentUser } from "@/lib/auth";
 import { getDatabase, getMongoClient } from "@/lib/mongodb";
+import { readBoundedJson } from "@/lib/bounded-json";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
@@ -11,46 +12,6 @@ async function teacher() {
   if (!user) return { error: NextResponse.json({ error: "Sign in to access teacher tools." }, { status: 401 }) };
   if (!["teacher", "admin"].includes(user.role)) return { error: NextResponse.json({ error: "Teacher permissions are required." }, { status: 403 }) };
   return { user };
-}
-
-async function readBoundedJson(request: Request, maxBytes: number): Promise<Record<string, unknown> | NextResponse> {
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > maxBytes) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-  if (!request.body) return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel();
-        return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-      }
-      chunks.push(value);
-    }
-  } catch {
-    return NextResponse.json({ error: "Could not read request body." }, { status: 400 });
-  }
-
-  try {
-    const bytes = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-    }
-    return parsed as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
-  }
 }
 
 async function mutationRateLimit(request: Request, scope: string) {
@@ -95,8 +56,8 @@ export async function POST(request: Request) {
   const limited = await mutationRateLimit(request, "teacher-write");
   if (limited) return limited;
   const parsed = await readBoundedJson(request, 16_000);
-  if (parsed instanceof NextResponse) return parsed;
-  const body = parsed;
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+  const body = parsed.value;
   const access = await teacher();
   if ("error" in access) return access.error;
 
@@ -136,8 +97,8 @@ export async function DELETE(request: Request) {
   const limited = await mutationRateLimit(request, "teacher-delete");
   if (limited) return limited;
   const parsed = await readBoundedJson(request, 4_000);
-  if (parsed instanceof NextResponse) return parsed;
-  const body = parsed;
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+  const body = parsed.value;
   if (typeof body.id !== "string" || !ObjectId.isValid(body.id) || !["class", "assignment"].includes(String(body.type))) {
     return NextResponse.json({ error: "Invalid item." }, { status: 400 });
   }
