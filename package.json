@@ -15,6 +15,10 @@
     "react": "latest",
     "react-dom": "latest"
   },
+  "overrides": {
+    "braces": "^3.0.3",
+    "postcss-selector-parser": "^7.1.6"
+  },
   "devDependencies": {
     "@types/node": "latest",
     "@types/react": "latest",
