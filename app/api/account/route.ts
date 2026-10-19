@@ -120,7 +120,7 @@ export async function DELETE(request: Request) {
         );
         await db.collection("classes").updateMany(
           { studentIds: user.id },
-          [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$studentId", user.id] } } }, updatedAt: new Date() } }],
+          [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$$studentId", user.id] } } }, updatedAt: new Date() } }],
           { session },
         );
         await db.collection("classes").deleteMany({ teacherId: user.id }, { session });
