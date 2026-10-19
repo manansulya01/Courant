@@ -266,8 +266,8 @@ export default function LiveCallPage() {
       peerRef.current = null;
       channelRef.current?.close();
       channelRef.current = null;
-      const avatar = avatarRef.current as { stopAvatar?: () => Promise<unknown> } | null;
-      if (avatar?.stopAvatar) void avatar.stopAvatar().catch(() => undefined);
+      const avatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+      if (avatar?.stop) void avatar.stop().catch(() => undefined);
       avatarRef.current = null;
       setAvatarReady(false);
       if (avatarVideoRef.current) avatarVideoRef.current.srcObject = null;
