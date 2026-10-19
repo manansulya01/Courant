@@ -56,7 +56,7 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
     if (!user || !["student","teacher","parent","admin"].includes(user.role)) return null;
     // Password resets revoke previously issued sessions. Older cookies without `iat`
     // are rejected once a password-change timestamp exists on the account.
-    if (user.passwordChangedAt instanceof Date && (!Number.isFinite(session.iat) || (session.iat as number) < Math.floor(user.passwordChangedAt.getTime() / 1000))) return null;
+    if (user.passwordChangedAt instanceof Date && (typeof session.iat !== "number" || !Number.isFinite(session.iat) || session.iat < Math.floor(user.passwordChangedAt.getTime() / 1000))) return null;
     return { id: user._id.toString(), name: user.name, email: user.email, role: user.role };
   } catch { return null; }
 }
