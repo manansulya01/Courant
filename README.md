@@ -12,7 +12,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 6. Optionally set `COURANT_TEACHER_INVITE_CODE`; teacher registration requires this invitation code.
 7. Add an OpenAI API key to `OPENAI_API_KEY` to enable AI conversation, image understanding, audio transcription, and spoken replies. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
 8. For live voice/video calls, ensure the OpenAI project has Realtime API access. Optional settings: `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_TRANSCRIPTION_MODEL`, and `OPENAI_REALTIME_VOICE`. The app issues short-lived client secrets from a same-origin, rate-limited server route; the permanent API key never reaches the browser.
-9. To show a continuously animated AI teacher during video calls, configure `HEYGEN_API_KEY` and `HEYGEN_AVATAR_ID` using a HeyGen Streaming Avatar enabled for your account. The API key stays server-side; a short-lived token is issued to the browser.
+9. To show a continuously animated AI teacher during video calls, configure ``LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` from your LiveAvatar account. The API key stays server-side; a short-lived session token is issued to the browser.
 10. Run `npm run dev` and open `http://localhost:3000`.
 
 ## Main experiences
