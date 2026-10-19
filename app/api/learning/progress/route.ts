@@ -40,7 +40,8 @@ export async function POST(request: Request) {
     const scenario = typeof body.scenario === "string" ? body.scenario.trim().slice(0, 120) : "Practice";
     const skill = typeof body.skill === "string" && ["conversation","pronunciation","listening","vocabulary","clarity","confidence","presentation"].includes(body.skill) ? body.skill : "conversation";
     const minutes = Number.isInteger(body.minutes) ? Math.max(0, Math.min(180, body.minutes)) : 0;
-    const score = typeof body.score === "number" && Number.isFinite(body.score) ? Math.max(0, Math.min(100, body.score)) : null;
+    const rawScore = body.score;
+    const score = typeof rawScore === "number" && Number.isFinite(rawScore) ? Math.max(0, Math.min(100, rawScore)) : null;
     const completed = body.completed === true;
     if (!lesson) return NextResponse.json({ error: "A lesson name is required." }, { status: 400 });
     const db = await getDatabase();
