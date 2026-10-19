@@ -62,7 +62,7 @@ await check("/api/account", 403, {
 });
 await check("/api/account", 401, {
   method: "DELETE",
-  headers: { "Content-Type": "application/json", "Origin": "http://localhost:3000" },
+  headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
   body: JSON.stringify({ confirmEmail: "nobody@example.com" }),
 });
 await check("/api/coach", 400, {
