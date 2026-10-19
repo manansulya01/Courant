@@ -57,6 +57,10 @@ await check("/api/tutor/realtime-session", 503, {
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
   body: JSON.stringify({ mode: "voice", scenario: "Smoke test" }),
 });
+await check("/api/tutor/avatar-token", 503, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
+});
 await check("/api/tutor/transcribe", 503, {
   method: "POST",
   headers: {},
