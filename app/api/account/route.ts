@@ -66,20 +66,20 @@ export async function DELETE(request: Request) {
         ).toArray();
         const ownedAssignmentIds = ownedAssignments.map((item) => item._id.toString());
 
-        await Promise.all([
-          db.collection("learningProgress").deleteMany({ userId: user.id }, { session }),
-          db.collection("portfolioItems").deleteMany({ userId: user.id }, { session }),
-          db.collection("assignmentSubmissions").deleteMany(
-            { $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }, { session },
-          ),
-          db.collection("classes").updateMany(
-            { studentIds: user.id },
-            [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$$studentId", user.id] } } }, updatedAt: new Date() } }],
-            { session },
-          ),
-          db.collection("classes").deleteMany({ teacherId: user.id }, { session }),
-          db.collection("assignments").deleteMany({ _id: { $in: ownedAssignments.map((item) => item._id) } }, { session }),
-        ]);
+        // Keep transaction operations sequential; the MongoDB driver does not support
+        // parallel operations on one transaction session.
+        await db.collection("learningProgress").deleteMany({ userId: user.id }, { session });
+        await db.collection("portfolioItems").deleteMany({ userId: user.id }, { session });
+        await db.collection("assignmentSubmissions").deleteMany(
+          { $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }, { session },
+        );
+        await db.collection("classes").updateMany(
+          { studentIds: user.id },
+          [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$studentId", user.id] } } }, updatedAt: new Date() } }],
+          { session },
+        );
+        await db.collection("classes").deleteMany({ teacherId: user.id }, { session });
+        await db.collection("assignments").deleteMany({ _id: { $in: ownedAssignments.map((item) => item._id) } }, { session });
         await db.collection("users").deleteOne({ _id: new ObjectId(user.id) }, { session });
       });
     } finally {
