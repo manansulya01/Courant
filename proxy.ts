@@ -19,6 +19,10 @@ export function proxy(request: NextRequest) {
   }
 
   const response = NextResponse.next();
+  // Authenticated learner and classroom payloads must never be stored by shared caches.
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    response.headers.set("Cache-Control", "no-store");
+  }
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
