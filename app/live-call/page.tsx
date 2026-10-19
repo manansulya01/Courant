@@ -206,9 +206,12 @@ export default function LiveCallPage() {
       channelRef.current = channel;
       channel.onopen = () => {
         setStatusText(mode === "video" ? "Connected. Say hello to your animated English teacher." : "Connected. Say hello whenever you're ready.");
+        const openingInstruction = mode === "video"
+          ? "Your LiveAvatar has already delivered its configured opening greeting. Do not greet or introduce yourself again. Ask me one friendly opening question, then help me improve my English naturally as we talk."
+          : "Start our English practice call now. Briefly introduce yourself, ask me one friendly opening question, and help me improve my English naturally as we talk.";
         sendEvent({
           type: "conversation.item.create",
-          item: { type: "message", role: "user", content: [{ type: "input_text", text: "Start our English practice call now. Briefly introduce yourself, ask me one friendly opening question, and help me improve my English naturally as we talk." }] },
+          item: { type: "message", role: "user", content: [{ type: "input_text", text: openingInstruction }] },
         });
         sendEvent({ type: "response.create" });
       };
