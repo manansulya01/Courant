@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
 import { readBoundedJson } from "@/lib/bounded-json";
 
@@ -51,9 +53,21 @@ export async function POST(request: Request) {
       : "a friendly everyday English conversation";
     const instructions = `${coachInstructions}\n\nCALL MODE: ${mode}. CONVERSATION CONTEXT: ${scenario || "a friendly everyday English conversation"}.`;
 
+    let safetyIdentifier: string | null = null;
+    try {
+      const user = await getCurrentUser();
+      if (user) safetyIdentifier = createHash("sha256").update(`${process.env.AUTH_SECRET || ""}:${user.id}`).digest("hex");
+    } catch {
+      // Anonymous calls remain available; identity is optional for provider safety metadata.
+    }
+
     const upstream = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        ...(safetyIdentifier ? { "OpenAI-Safety-Identifier": safetyIdentifier } : {}),
+      },
       body: JSON.stringify({
         expires_after: { anchor: "created_at", seconds: 600 },
         session: {
