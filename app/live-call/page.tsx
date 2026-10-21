@@ -174,11 +174,14 @@ export default function LiveCallPage() {
           }
         });
         avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
-          const nextState = state;
-          if (nextState === "disconnected" || nextState === "stopped" || nextState === "failed") {
+          if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "INACTIVE") {
             setAvatarReady(false);
             if (statusRef.current === "connected") setStatusText("The animated teacher video disconnected. End the call and reconnect.");
           }
+        });
+        avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
+          setAvatarReady(false);
+          if (statusRef.current === "connected") setStatusText("The animated teacher video disconnected. End the call and reconnect.");
         });
         await avatar.start();
       }
@@ -221,8 +224,10 @@ export default function LiveCallPage() {
         const type = String(payload.type || "");
         if (type === "input_audio_buffer.speech_started") {
           setStatusText("Listening to you…");
-          const avatar = avatarRef.current as { interrupt?: () => Promise<unknown> } | null;
-          if (mode === "video" && avatar?.interrupt) void avatar.interrupt().catch(() => undefined);
+          const avatar = avatarRef.current as { interrupt?: () => void } | null;
+          if (mode === "video" && avatar?.interrupt) {
+            try { avatar.interrupt(); } catch { /* Session may already be ending. */ }
+          }
         }
         if (type === "input_audio_buffer.speech_stopped") setStatusText("Working on a natural reply and a useful correction…");
         if (type === "conversation.item.input_audio_transcription.completed") {
@@ -235,8 +240,11 @@ export default function LiveCallPage() {
             addLine("courant", transcript);
             if (mode === "video" && transcript !== lastAvatarTextRef.current) {
               lastAvatarTextRef.current = transcript;
-              const avatar = avatarRef.current as { repeat: (text: string) => Promise<unknown> } | null;
-              if (avatar) void avatar.repeat(transcript).catch(() => setError("The animated teacher could not speak this reply. Please try reconnecting."));
+              const avatar = avatarRef.current as { repeat: (text: string) => string } | null;
+              if (avatar) {
+                try { avatar.repeat(transcript); }
+                catch { setError("The animated teacher could not speak this reply. Please try reconnecting."); }
+              }
             }
           }
         }
