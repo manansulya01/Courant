@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     );
     const input = parsed.value;
     const message = typeof input.message === "string" ? input.message.trim().slice(0, MAX_MESSAGE_LENGTH) : "";
-    const scenario = typeof input.scenario === "string" ? input.scenario.trim().replace(/[<>\\u0000-\\u001f]/g, "").slice(0, 120) : "Everyday conversation";
+    const scenario = typeof input.scenario === "string" ? input.scenario.trim().replace(/[<>\u0000-\u001f]/g, "").slice(0, 120) : "Everyday conversation";
     const history: Turn[] = Array.isArray(input.history)
       ? input.history.slice(-MAX_HISTORY_TURNS).flatMap((turn: unknown): Turn[] => {
           if (!turn || typeof turn !== "object") return [];
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     let image: { mimeType: string; data: string } | null = null;
     if (typeof input.image === "string" && input.image.length > 0) {
       if (input.image.length > MAX_IMAGE_DATA_URL_LENGTH) return errorResponse("That picture is too large. Try a smaller image.", 413);
-      const match = input.image.match(/^data:image\\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+      const match = input.image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
       if (!match) return errorResponse("Please choose a JPEG, PNG, or WebP picture.", 400);
       image = { mimeType: `image/${match[1]}`, data: match[2] };
     }
