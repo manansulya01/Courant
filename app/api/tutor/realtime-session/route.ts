@@ -79,8 +79,8 @@ export async function POST(request: Request) {
           config: {
             responseModalities: ["AUDIO"],
             systemInstruction: { parts: [{ text: instructions }] },
-            inputAudioTranscription: { languageCodes: ["en-US"] },
-            outputAudioTranscription: { languageCodes: ["en-US"] },
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
             generationConfig: { temperature: 0.65, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
           },
