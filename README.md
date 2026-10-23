@@ -10,8 +10,8 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 4. Create a MongoDB Atlas cluster and database user; set `MONGODB_URI` and `MONGODB_DB=courant`.
 5. Set `AUTH_SECRET` to a cryptographically random value at least 32 characters long. Do not commit real secrets.
 6. Optionally set `COURANT_TEACHER_INVITE_CODE`; teacher registration requires this invitation code.
-7. Add an OpenAI API key to `OPENAI_API_KEY` to enable AI conversation, image understanding, audio transcription, and spoken replies. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
-8. For live voice/video calls, ensure the OpenAI project has Realtime API access. Optional settings: `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_TRANSCRIPTION_MODEL`, and `OPENAI_REALTIME_VOICE`. The app issues short-lived client secrets from a same-origin, rate-limited server route; the permanent API key never reaches the browser.
+7. Add a Gemini API key to `GEMINI_API_KEY` for the migrated text/image tutor and Gemini Live calls. Keep it server-side; never prefix it with `NEXT_PUBLIC_`. The default models are configured by `GEMINI_TEXT_MODEL` and `GEMINI_LIVE_MODEL`.
+8. Some optional speech/transcription endpoints may still rely on the legacy `OPENAI_API_KEY` until that migration is completed. Keep it configured if you use those endpoints; never expose it to the browser.
 9. To show a continuously animated AI teacher during video calls, configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` from your LiveAvatar account. Create a reusable context with an encouraging English-coach prompt and opening greeting, then use its context ID. The API key stays server-side; only a short-lived session token is issued to the browser.
 10. Run `npm run dev` and open `http://localhost:3000`.
 
@@ -31,7 +31,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `POST /api/tutor` — conversational tutoring with optional image input and recent saved learning context
 - `POST /api/tutor/transcribe` — converts recorded speech to text
 - `POST /api/tutor/speech` — returns a spoken audio reply
-- `POST /api/tutor/realtime-session` — issues a short-lived Realtime API client secret for WebRTC calls
+- `POST /api/tutor/realtime-session` — issues a short-lived Gemini Live API token for real-time calls
 - `POST /api/tutor/avatar-token` — issues a short-lived LiveAvatar session token for animated teacher video; the provider API key remains server-side
 - `GET /api/health` — reports database readiness and whether server-side AI/auth configuration is present
 - `/api/learning/progress` — save/read authenticated learner progress
@@ -42,11 +42,11 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `/api/assignments/submissions` — student submissions and teacher review
 - `/api/account` — export personal data or delete an account and associated records
 
-The application uses MongoDB collections for users, learning progress, classes, assignments, assignment submissions, rate limits, and portfolio items. Passwords are hashed using Node.js scrypt; sessions use signed, HttpOnly cookies. The app does not save chat transcripts or raw audio recordings; learners can explicitly save lesson metadata to their journal. In the turn-based practice room, learners can speak through push-to-talk recording, review the transcription before sending it, hear natural spoken replies, and replay the latest reply. Live calls use WebRTC for low-latency speech and return spoken corrections during the conversation. When LiveAvatar is configured, video mode renders the AI teacher as a live animated video stream; the learner's own camera remains optional and visual snapshots sent to the language model are separate. Without LiveAvatar configuration, live voice remains available but animated teacher video is unavailable. Camera/microphone access requires explicit browser permission and HTTPS in production. A browser speech-synthesis fallback may be used if the configured voice service is unavailable.
+The application uses MongoDB collections for users, learning progress, classes, assignments, assignment submissions, rate limits, and portfolio items. Passwords are hashed using Node.js scrypt; sessions use signed, HttpOnly cookies. The app does not save chat transcripts or raw audio recordings; learners can explicitly save lesson metadata to their journal. In the turn-based practice room, learners can speak through push-to-talk recording, review the transcription before sending it, hear natural spoken replies, and replay the latest reply. Live calls connect to Gemini Live over WebSocket for low-latency audio; camera frames can be shared during video mode. When LiveAvatar is configured, video mode renders the AI teacher as a live animated video stream; the learner's own camera remains optional and visual snapshots sent to the language model are separate. Without LiveAvatar configuration, live voice remains available but animated teacher video is unavailable. Camera/microphone access requires explicit browser permission and HTTPS in production. A browser speech-synthesis fallback may be used if the configured voice service is unavailable.
 
 ## Before production or school rollout
 
-This repository includes working implementation foundations, but passing a code commit or CI build is not a substitute for security review or a deployed end-to-end test. Configure MongoDB, `AUTH_SECRET`, teacher invitations, and the OpenAI key before trying account or AI flows. Browser media support varies by iPadOS/Safari version; microphone/camera access requires user permission and HTTPS in production.
+This repository includes working implementation foundations, but passing a code commit or CI build is not a substitute for security review or a deployed end-to-end test. Configure MongoDB, `AUTH_SECRET`, teacher invitations, and the required Gemini key before trying account or AI flows. Browser media support varies by iPadOS/Safari version; microphone/camera access requires user permission and HTTPS in production.
 
 State-changing API routes check request origin, and high-cost/authenticated write endpoints use MongoDB-backed rate-limit buckets. JSON APIs that accept learner text, feedback, progress, or account actions enforce byte limits while streaming request bodies, including requests without a trustworthy `Content-Length`. Baseline browser security headers are applied by the Next.js proxy entry point. The rate limiter depends on MongoDB being available and should be validated behind the actual production proxy before launch.
 
@@ -56,3 +56,8 @@ Still required before enrolling real students: configure and verify production e
 ### Password recovery email
 
 Password recovery is enabled when `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verified sender in Resend), and `APP_URL` (the canonical HTTPS application origin in production) are configured. Reset links expire after 30 minutes and are single-use. Without email configuration, the request endpoint intentionally responds with a generic message and does not send a link.
+
+
+## Deploying to Render
+
+A starter Render Blueprint is provided in `render.yaml`. In Render, create a new Blueprint from this GitHub repository and select the `fix/gemini-tutor-migration` branch for preview testing. Set the prompted secret values (`MONGODB_URI`, `GEMINI_API_KEY`, and the canonical HTTPS `APP_URL`) before expecting the health check to pass. Configure MongoDB Atlas Network Access to allow the Render service to connect using a restricted, appropriate network policy; do not publish database credentials or open access broadly as a permanent fix. Verify the preview before merging the migration into `main`.
