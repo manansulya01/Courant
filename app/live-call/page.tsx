@@ -299,6 +299,7 @@ export default function LiveCallPage() {
 
   function toggleMute() {
     const next = !muted;
+    streamRef.current?.getAudioTracks().forEach(track => { track.enabled = !next; });
     setMuted(next);
     setStatusText(next ? "Microphone muted." : "Microphone on. Your turn to speak.");
   }
