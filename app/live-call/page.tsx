@@ -212,15 +212,16 @@ export default function LiveCallPage() {
           setStatusText("Listening and coaching…");
         }
         if (server?.outputTranscription?.text) {
-          const text = String(server.outputTranscription.text);
-          outputTranscript += text;
-          if (mode === "video" && avatarRef.current) {
-            const avatar = avatarRef.current as { repeat?: (text: string) => unknown };
-            try { avatar.repeat?.(text); } catch { /* Avatar can be unavailable while audio coaching continues. */ }
-          }
+          outputTranscript += String(server.outputTranscription.text);
         }
         if (server?.turnComplete) {
-          if (outputTranscript.trim()) addLine("courant", outputTranscript.trim());
+          if (outputTranscript.trim()) {
+            addLine("courant", outputTranscript.trim());
+            if (mode === "video" && avatarRef.current) {
+              const avatar = avatarRef.current as { repeat?: (text: string) => unknown };
+              try { avatar.repeat?.(outputTranscript.trim()); } catch { /* Avatar can be unavailable while audio coaching continues. */ }
+            }
+          }
           outputTranscript = "";
           setStatusText("Your turn. Speak naturally; you can interrupt Courant at any time.");
         }
