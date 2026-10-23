@@ -173,7 +173,6 @@ export default function LiveCallPage() {
       processorRef.current = processor;
       const silentGain = context.createGain();
       silentGain.gain.value = 0;
-      source.connect(processor);
       processor.connect(silentGain);
       silentGain.connect(context.destination);
 
@@ -189,8 +188,8 @@ export default function LiveCallPage() {
             model: `models/${sessionData.model || "gemini-3.1-flash-live-preview"}`,
             generationConfig: { responseModalities: ["AUDIO"], temperature: 0.65, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
             systemInstruction: { parts: [{ text: instructions }] },
-            inputAudioTranscription: { languageCodes: ["en-US"] },
-            outputAudioTranscription: { languageCodes: ["en-US"] },
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
           },
         }));
