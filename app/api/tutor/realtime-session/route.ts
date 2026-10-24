@@ -65,6 +65,14 @@ export async function POST(request: Request) {
     const instructions = `${coachInstructions}\n\nLEARNER LEVEL: ${level}. ${levelGuidance[level]}\nCALL MODE: ${mode}. CONVERSATION CONTEXT: ${scenario || "a friendly everyday English conversation"}.${learnerHint}`;
     const now = Date.now();
     const model = process.env.GEMINI_LIVE_MODEL || "gemini-3.1-flash-live-preview";
+    const liveConfig = {
+      responseModalities: ["AUDIO"],
+      systemInstruction: { parts: [{ text: instructions }] },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
+      realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
+      generationConfig: { temperature: 0.65, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
+    };
     const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/auth_tokens", {
       method: "POST",
       headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
@@ -76,14 +84,7 @@ export async function POST(request: Request) {
         newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
         liveConnectConstraints: {
           model: `models/${model}`,
-          config: {
-            responseModalities: ["AUDIO"],
-            systemInstruction: { parts: [{ text: instructions }] },
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
-            realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
-            generationConfig: { temperature: 0.65, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
-          },
+          config: liveConfig,
         },
       }),
     });
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
     const data = await upstream.json() as { name?: unknown; expireTime?: unknown };
     if (typeof data.name !== "string" || !data.name) return fail("The live voice service returned an invalid session token.", 502);
     return NextResponse.json(
-      { clientSecret: data.name, expiresAt: data.expireTime ?? null, mode, model },
+      { clientSecret: data.name, expiresAt: data.expireTime ?? null, mode, model, config: liveConfig },
       { headers: { ...noStore, "X-Content-Type-Options": "nosniff" } },
     );
   } catch (error) {
