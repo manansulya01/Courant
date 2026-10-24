@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: courant
+    runtime: node
+    plan: starter
+    buildCommand: npm install --no-audit --no-fund && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: courant
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_TEXT_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_LIVE_MODEL
+        value: gemini-3.1-flash-live-preview
+      - key: APP_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: LIVEAVATAR_API_KEY
+        sync: false
+      - key: LIVEAVATAR_AVATAR_ID
+        sync: false
+      - key: LIVEAVATAR_CONTEXT_ID
+        sync: false
