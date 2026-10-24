@@ -182,15 +182,10 @@ export default function LiveCallPage() {
       let setupComplete = false;
       let outputTranscript = "";
       socket.onopen = () => {
-        const instructions = `You are Courant, an encouraging English tutor. Speak naturally and briefly. Correct one or two important grammar or phrasing mistakes gently, then ask one relevant follow-up question. Learner level: ${level}. Scenario: ${scenario}. ${strictCorrections ? "The learner requests thorough corrections while remaining encouraging." : ""} In video mode, use camera frames only when relevant. Do not claim to see anything outside shared frames.`;
         socket.send(JSON.stringify({
           setup: {
             model: `models/${sessionData.model || "gemini-3.1-flash-live-preview"}`,
-            generationConfig: { responseModalities: ["AUDIO"], temperature: 0.65, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
-            systemInstruction: { parts: [{ text: instructions }] },
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
-            realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
+            ...(sessionData.config && typeof sessionData.config === "object" ? sessionData.config : {}),
           },
         }));
       };
