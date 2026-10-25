@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request protection is temporarily unavailable. Please try again." }, { status: 503, headers: noStore });
   }
 
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return NextResponse.json({ error: "Audio transcription needs OPENAI_API_KEY in the server environment." }, { status: 503, headers: noStore });
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return NextResponse.json({ error: "Audio transcription is not configured. Add GEMINI_API_KEY to the server environment." }, { status: 503, headers: noStore });
 
   try {
     const bounded = await readBoundedBytes(request, 21 * 1024 * 1024);
@@ -38,23 +38,30 @@ export async function POST(request: Request) {
     if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: "Please keep audio clips under 20 MB." }, { status: 413, headers: noStore });
     if (!file.type.startsWith("audio/")) return NextResponse.json({ error: "Please provide an audio recording." }, { status: 415, headers: noStore });
 
-    const upstream = new FormData();
-    upstream.append("file", file, file.name || "practice.webm");
-    upstream.append("model", process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe");
-    upstream.append("language", language);
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const mimeType = file.type.split(";")[0].trim().toLowerCase() || "audio/webm";
+    const audioBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    const model = process.env.GEMINI_TRANSCRIPTION_MODEL || process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}` },
-      body: upstream,
+      headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [
+          { text: `Transcribe the spoken audio accurately in its original language (${language}). Return only the words that were spoken. Do not translate, summarize, add commentary, or include labels. If no intelligible speech is present, return an empty response.` },
+          { inlineData: { mimeType, data: audioBase64 } },
+        ] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 600 },
+      }),
       signal: AbortSignal.timeout(35_000),
     });
     if (!response.ok) {
-      if (response.status === 429) return NextResponse.json({ error: "Audio service is busy. Please wait a moment and try again." }, { status: 429, headers: noStore });
-      return NextResponse.json({ error: "We couldn't transcribe that recording. Please try again or type your answer." }, { status: 502, headers: noStore });
+      if (response.status === 429) return NextResponse.json({ error: "Gemini audio service is busy. Please wait a moment and try again." }, { status: 429, headers: noStore });
+      const details = await response.text().catch(() => "");
+      console.error("Gemini transcription request failed:", response.status, details.slice(0, 300));
+      return NextResponse.json({ error: "We couldn't transcribe that recording. Check Gemini audio support and quota, then try again." }, { status: 502, headers: noStore });
     }
-    const data: unknown = await response.json();
-    const text = (data as { text?: unknown }).text;
-    return NextResponse.json({ text: typeof text === "string" ? text.slice(0, 4000) : "" }, { headers: noStore });
+    const data = await response.json() as { candidates?: { content?: { parts?: { text?: unknown }[] } }[] };
+    const text = data.candidates?.[0]?.content?.parts?.map(part => typeof part.text === "string" ? part.text : "").join("").trim() || "";
+    return NextResponse.json({ text: text.slice(0, 4000) }, { headers: noStore });
   } catch (error) {
     if (error instanceof SyntaxError) return NextResponse.json({ error: "That recording could not be read. Please record again." }, { status: 400, headers: noStore });
     if (error instanceof Error && error.name === "TimeoutError") return NextResponse.json({ error: "Audio processing took too long. Please try recording again." }, { status: 504, headers: noStore });
