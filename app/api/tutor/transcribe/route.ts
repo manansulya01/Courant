@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       console.error("Gemini transcription request failed:", response.status, details.slice(0, 300));
       return NextResponse.json({ error: "We couldn't transcribe that recording. Check Gemini audio support and quota, then try again." }, { status: 502, headers: noStore });
     }
-    const data = await response.json() as { candidates?: { content?: { parts?: { text?: unknown }[] }[] }[] };
+    const data = await response.json() as { candidates?: { content?: { parts?: { text?: unknown }[] } }[] };
     const text = data.candidates?.[0]?.content?.parts?.map(part => typeof part.text === "string" ? part.text : "").join("").trim() || "";
     return NextResponse.json({ text: text.slice(0, 4000) }, { headers: noStore });
   } catch (error) {
