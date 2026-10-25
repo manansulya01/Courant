@@ -20,7 +20,7 @@ export async function GET() {
       status: ready ? "ok" : "degraded",
       checks: {
         database,
-        aiConfigured: Boolean(process.env.OPENAI_API_KEY),
+        aiConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY),
         authConfigured,
       },
       latencyMs: Date.now() - started,
