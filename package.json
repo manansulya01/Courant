@@ -14,7 +14,8 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@heygen/liveavatar-web-sdk": "^0.0.19"
+    "@heygen/liveavatar-web-sdk": "^0.0.19",
+    "@mlc-ai/web-llm": "^0.2.80"
   },
   "devDependencies": {
     "@types/node": "latest",
