@@ -61,6 +61,10 @@ await check("/api/tutor/avatar-token", 503, {
   method: "POST",
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
 });
+await check("/api/tutor/avatar-token", 403, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
+});
 await check("/api/tutor/transcribe", 503, {
   method: "POST",
   headers: {},
