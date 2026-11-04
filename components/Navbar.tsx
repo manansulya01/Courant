@@ -11,6 +11,7 @@ export default function Navbar() {
     ["Learning path", "#program"],
     ["For schools", "#schools"],
     ["Local tutor", "/local-tutor"],
+    ["Offline practice", "/offline-practice"],
   ];
 
   return (
