@@ -12,7 +12,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 6. Optionally set `COURANT_TEACHER_INVITE_CODE`; teacher registration requires this invitation code.
 7. Add a Gemini API key to `GEMINI_API_KEY` for the migrated text/image tutor and Gemini Live calls. Keep it server-side; never prefix it with `NEXT_PUBLIC_`. The default models are configured by `GEMINI_TEXT_MODEL` and `GEMINI_LIVE_MODEL`.
 8. Speech generation and recorded-audio transcription also use Gemini. Configure `GEMINI_TTS_MODEL` (default `gemini-2.5-flash-preview-tts`) and `GEMINI_TRANSCRIPTION_MODEL` (default `gemini-2.5-flash`) if you need to override the defaults. All AI provider keys remain server-side.
-9. To show a continuously animated AI teacher during video calls, configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` from your LiveAvatar account. Create a reusable context with an encouraging English-coach prompt and opening greeting, then use its context ID. The API key stays server-side; only a short-lived session token is issued to the browser.
+9. To show a continuously animated AI teacher during video calls, configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` (plus optional `LIVEAVATAR_VOICE_ID` for video avatars) from your LiveAvatar account. Create a reusable context with an encouraging English-coach prompt and opening greeting, then use its context ID. The API key stays server-side; only a short-lived session token is issued to the browser.
 10. Run `npm run dev` and open `http://localhost:3000`.
 
 ## Main experiences

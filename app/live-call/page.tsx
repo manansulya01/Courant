@@ -147,22 +147,28 @@ export default function LiveCallPage() {
 
       if (mode === "video") {
         const avatarTokenResponse = await fetch("/api/tutor/avatar-token", { method: "POST" });
-        if (avatarTokenResponse.ok) {
-          const avatarTokenData = await avatarTokenResponse.json();
-          const { LiveAvatarSession, SessionEvent } = await import("@heygen/liveavatar-web-sdk");
-          const avatar = new LiveAvatarSession(avatarTokenData.sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
-          avatarRef.current = avatar;
-          avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
-            if (avatarVideoRef.current) {
-              avatar.attach(avatarVideoRef.current);
-              setAvatarReady(true);
-            }
-          });
-          avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
-            if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "INACTIVE") setAvatarReady(false);
-          });
-          await avatar.start();
-        }
+        const avatarTokenData = await avatarTokenResponse.json();
+        if (!avatarTokenResponse.ok) throw new Error(avatarTokenData.error || "Animated teacher video is not configured.");
+        const { LiveAvatarSession, SessionEvent } = await import("@heygen/liveavatar-web-sdk");
+        const avatar = new LiveAvatarSession(avatarTokenData.sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
+        avatarRef.current = avatar;
+        avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
+          if (avatarVideoRef.current) {
+            avatar.attach(avatarVideoRef.current);
+            setAvatarReady(true);
+          }
+        });
+        avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
+          if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "INACTIVE") {
+            setAvatarReady(false);
+            if (statusRef.current === "connected") setStatusText("The animated teacher disconnected. End the call and reconnect.");
+          }
+        });
+        avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
+          setAvatarReady(false);
+          if (statusRef.current === "connected") setStatusText("The animated teacher disconnected. End the call and reconnect.");
+        });
+        await avatar.start();
       }
 
       const context = new AudioContext();
@@ -204,6 +210,10 @@ export default function LiveCallPage() {
         if (server?.inputTranscription?.text) {
           addLine("you", String(server.inputTranscription.text));
           setStatusText("Listening and coaching…");
+          const avatar = avatarRef.current as { startListening?: () => void } | null;
+          if (mode === "video" && avatar?.startListening) {
+            try { avatar.startListening(); } catch { /* Session may be ending. */ }
+          }
         }
         if (server?.outputTranscription?.text) {
           outputTranscript += String(server.outputTranscription.text);
@@ -212,8 +222,11 @@ export default function LiveCallPage() {
           if (outputTranscript.trim()) {
             addLine("courant", outputTranscript.trim());
             if (mode === "video" && avatarRef.current) {
-              const avatar = avatarRef.current as { repeat?: (text: string) => unknown };
-              try { avatar.repeat?.(outputTranscript.trim()); } catch { /* Avatar can be unavailable while audio coaching continues. */ }
+              const avatar = avatarRef.current as { repeat?: (text: string) => unknown; stopListening?: () => void };
+              try {
+                avatar.stopListening?.();
+                avatar.repeat?.(outputTranscript.trim());
+              } catch { setError("The animated teacher could not speak this reply. Please try reconnecting."); }
             }
           }
           outputTranscript = "";
@@ -222,6 +235,10 @@ export default function LiveCallPage() {
         if (server?.interrupted) {
           outputTranscript = "";
           playbackTimeRef.current = context.currentTime;
+          const avatar = avatarRef.current as { interrupt?: () => void } | null;
+          if (mode === "video" && avatar?.interrupt) {
+            try { avatar.interrupt(); } catch { /* Session may be ending. */ }
+          }
         }
         const parts = server?.modelTurn?.parts;
         if (Array.isArray(parts)) for (const part of parts) {
