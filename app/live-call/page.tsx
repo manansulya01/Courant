@@ -146,9 +146,16 @@ export default function LiveCallPage() {
       if (typeof sessionData.clientSecret !== "string") throw new Error("The live session was not configured correctly.");
 
       if (mode === "video") {
-        const avatarTokenResponse = await fetch("/api/tutor/avatar-token", { method: "POST" });
-        if (avatarTokenResponse.ok) {
-          const avatarTokenData = await avatarTokenResponse.json();
+        setStatusText("Starting your animated English teacher…");
+        try {
+          const avatarTokenResponse = await fetch("/api/tutor/avatar-token", { method: "POST" });
+          const avatarTokenData = await avatarTokenResponse.json().catch(() => ({}));
+          if (!avatarTokenResponse.ok) {
+            throw new Error(typeof avatarTokenData.error === "string" ? avatarTokenData.error : "Animated teacher video is unavailable. Voice coaching will continue.");
+          }
+          if (typeof avatarTokenData.sessionToken !== "string" || !avatarTokenData.sessionToken) {
+            throw new Error("The animated teacher service returned an invalid session. Voice coaching will continue.");
+          }
           const { LiveAvatarSession, SessionEvent } = await import("@heygen/liveavatar-web-sdk");
           const avatar = new LiveAvatarSession(avatarTokenData.sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
           avatarRef.current = avatar;
@@ -156,12 +163,24 @@ export default function LiveCallPage() {
             if (avatarVideoRef.current) {
               avatar.attach(avatarVideoRef.current);
               setAvatarReady(true);
+              setStatusText("Your animated teacher is connected. Speak naturally whenever you're ready.");
             }
           });
           avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
-            if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "INACTIVE") setAvatarReady(false);
+            if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "INACTIVE") {
+              setAvatarReady(false);
+              setStatusText("The animated teacher disconnected. Your voice conversation can continue.");
+            }
           });
           await avatar.start();
+        } catch (avatarError) {
+          const message = avatarError instanceof Error ? avatarError.message : "Animated teacher video is unavailable.";
+          setError(message);
+          setStatusText("Voice coaching will continue. Animated teacher video is currently unavailable.");
+          const avatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+          if (avatar?.stop) void avatar.stop().catch(() => undefined);
+          avatarRef.current = null;
+          setAvatarReady(false);
         }
       }
 
@@ -360,7 +379,7 @@ export default function LiveCallPage() {
             {!avatarReady && <div className={`relative z-10 grid h-28 w-28 place-items-center rounded-full border border-white/15 bg-white/10 shadow-2xl backdrop-blur-sm sm:h-36 sm:w-36 ${status === "connected" ? "animate-pulse" : ""}`}>
               <div className="grid h-20 w-20 place-items-center rounded-full bg-[#e8eee8] text-3xl text-[#263b32] sm:h-28 sm:w-28" aria-hidden="true">✳</div>
             </div>}
-            <p className="relative z-10 mt-6 text-xl font-medium">{mode === "video" && avatarReady ? "Your English teacher is here." : status === "connected" ? "Courant is here." : status === "connecting" ? "Setting up your call…" : "Your English conversation partner"}</p>
+            <p className="relative z-10 mt-6 text-xl font-medium">{mode === "video" && avatarReady ? "Your English teacher is here." : mode === "video" && status === "connected" ? "Voice coaching is active." : status === "connected" ? "Courant is here." : status === "connecting" ? "Setting up your call…" : "Your English conversation partner"}</p>
             <p className={`relative z-10 mt-2 max-w-sm text-sm leading-6 text-white/70 ${avatarReady ? "rounded-full bg-black/55 px-3 py-1" : ""}`}>{statusText}</p>
             {mode === "video" && active && <span className="absolute left-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider">{cameraEnabled ? "Camera on" : "Camera paused"}</span>}
             {status === "connected" && <span className="absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"><span className="h-2 w-2 rounded-full bg-emerald-400"/> Live</span>}
