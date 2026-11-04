@@ -13,6 +13,13 @@ declare global {
 
 let clientPromise: Promise<MongoClient> | undefined;
 
+const clientOptions = {
+  maxPoolSize: 10,
+  minPoolSize: 0,
+  maxIdleTimeMS: 30_000,
+  serverSelectionTimeoutMS: 5_000,
+};
+
 function getClientPromise() {
   if (!uri) {
     throw new Error("Missing MONGODB_URI. Add your MongoDB Atlas connection string to .env.local.");
@@ -20,14 +27,23 @@ function getClientPromise() {
 
   if (process.env.NODE_ENV === "development") {
     if (!global._mongoClientPromise) {
-      const client = new MongoClient(uri, { maxPoolSize: 10, minPoolSize: 0, maxIdleTimeMS: 30_000, serverSelectionTimeoutMS: 5_000 });
-      global._mongoClientPromise = client.connect();
+      const pending = new MongoClient(uri, clientOptions).connect();
+      global._mongoClientPromise = pending.catch((error: unknown) => {
+        // A failed connection must not poison the development process forever.
+        global._mongoClientPromise = undefined;
+        throw error;
+      });
     }
     return global._mongoClientPromise;
   }
 
   if (!clientPromise) {
-    clientPromise = new MongoClient(uri, { maxPoolSize: 10, minPoolSize: 0, maxIdleTimeMS: 30_000, serverSelectionTimeoutMS: 5_000 }).connect();
+    const pending = new MongoClient(uri, clientOptions).connect();
+    clientPromise = pending.catch((error: unknown) => {
+      // Allow a later request to retry after transient DNS/network/Atlas failures.
+      clientPromise = undefined;
+      throw error;
+    });
   }
   return clientPromise;
 }
