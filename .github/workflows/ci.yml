@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, security tests, and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AUTH_SECRET: ci-only-secret-that-is-long-enough-for-builds
+      MONGODB_URI: mongodb://127.0.0.1:27017/courant
+      MONGODB_DB: courant
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run ESLint
+        run: npm run lint
+      - name: Run bounded-input and class-code security tests
+        run: npm run test:security
+      - name: Build production application
+        run: npm run build
