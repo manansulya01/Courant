@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
+import { getCurrentUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -11,6 +12,11 @@ function fail(error: string, status: number) {
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return fail("Request origin was not accepted.", 403);
+
+  // A LiveAvatar session consumes a paid provider resource. Only authenticated
+  // learners may create one; guest voice practice remains available separately.
+  const user = await getCurrentUser();
+  if (!user) return fail("Sign in to start an animated teacher video call.", 401);
 
   try {
     const rate = await checkRateLimit(request, "avatar-token", 4, 60);
