@@ -224,12 +224,21 @@ export default function LiveCallPage() {
         const type = String(payload.type || "");
         if (type === "input_audio_buffer.speech_started") {
           setStatusText("Listening to you…");
-          const avatar = avatarRef.current as { interrupt?: () => void } | null;
-          if (mode === "video" && avatar?.interrupt) {
-            try { avatar.interrupt(); } catch { /* Session may already be ending. */ }
+          const avatar = avatarRef.current as { interrupt?: () => void; startListening?: () => void } | null;
+          if (mode === "video" && avatar) {
+            try {
+              avatar.interrupt?.();
+              avatar.startListening?.();
+            } catch { /* Session may already be ending. */ }
           }
         }
-        if (type === "input_audio_buffer.speech_stopped") setStatusText("Working on a natural reply and a useful correction…");
+        if (type === "input_audio_buffer.speech_stopped") {
+          setStatusText("Working on a natural reply and a useful correction…");
+          const avatar = avatarRef.current as { stopListening?: () => void } | null;
+          if (mode === "video" && avatar?.stopListening) {
+            try { avatar.stopListening(); } catch { /* Session may already be ending. */ }
+          }
+        }
         if (type === "conversation.item.input_audio_transcription.completed") {
           const transcript = typeof payload.transcript === "string" ? payload.transcript : "";
           if (transcript) addLine("you", transcript);
