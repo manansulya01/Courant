@@ -57,14 +57,11 @@ await check("/api/tutor/realtime-session", 503, {
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
   body: JSON.stringify({ mode: "voice", scenario: "Smoke test" }),
 });
-const avatarTokenCheck = await fetch(new URL("/api/tutor/avatar-token", baseUrl), {
+// Anonymous avatar-token requests must be rejected before checking provider configuration.
+await check("/api/tutor/avatar-token", 401, {
   method: "POST",
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
 });
-if (![200, 503].includes(avatarTokenCheck.status)) {
-  throw new Error(`POST /api/tutor/avatar-token: expected HTTP 200 or 503, got ${avatarTokenCheck.status}`);
-}
-console.log(`PASS POST /api/tutor/avatar-token → ${avatarTokenCheck.status}`);
 await check("/api/tutor/avatar-token", 403, {
   method: "POST",
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
