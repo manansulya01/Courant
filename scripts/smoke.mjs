@@ -57,7 +57,8 @@ await check("/api/tutor/realtime-session", 503, {
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
   body: JSON.stringify({ mode: "voice", scenario: "Smoke test" }),
 });
-await check("/api/tutor/avatar-token", 503, {
+// Avatar tokens are intentionally protected: unauthenticated smoke requests must be rejected before provider configuration is checked.
+await check("/api/tutor/avatar-token", 401, {
   method: "POST",
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
 });
