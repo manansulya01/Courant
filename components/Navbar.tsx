@@ -10,6 +10,7 @@ export default function Navbar() {
     ["Practice library", "#labs"],
     ["Learning path", "#program"],
     ["For schools", "#schools"],
+    ["Local tutor", "/local-tutor"],
   ];
 
   return (
@@ -21,7 +22,7 @@ export default function Navbar() {
         </Link>
 
         <nav aria-label="Main navigation" className="hidden items-center gap-8 text-xs font-medium text-[var(--muted)] md:flex">
-          {links.map(([label, href]) => <a key={href} className="quiet-link" href={href}>{label}</a>)}
+          {links.map(([label, href]) => href.startsWith("/") ? <Link key={href} className="quiet-link" href={href}>{label}</Link> : <a key={href} className="quiet-link" href={href}>{label}</a>)}
         </nav>
 
         <div className="flex items-center gap-3 sm:gap-5">
@@ -40,7 +41,7 @@ export default function Navbar() {
       </div>
 
       {open && <nav aria-label="Mobile navigation" className="container flex flex-col gap-1 border-t border-[var(--line)] py-3 text-sm font-medium md:hidden">
-        {links.map(([label, href]) => <a key={href} className="rounded-xl px-3 py-3 transition hover:bg-[var(--accent-soft)]" href={href} onClick={() => setOpen(false)}>{label}<span className="float-right text-[var(--muted)]">↗</span></a>)}
+        {links.map(([label, href]) => href.startsWith("/") ? <Link key={href} className="rounded-xl px-3 py-3 transition hover:bg-[var(--accent-soft)]" href={href} onClick={() => setOpen(false)}>{label}<span className="float-right text-[var(--muted)]">↗</span></Link> : <a key={href} className="rounded-xl px-3 py-3 transition hover:bg-[var(--accent-soft)]" href={href} onClick={() => setOpen(false)}>{label}<span className="float-right text-[var(--muted)]">↗</span></a>)}
         <Link className="rounded-xl px-3 py-3 transition hover:bg-[var(--accent-soft)]" href="/login" onClick={() => setOpen(false)}>Sign in</Link>
       </nav>}
     </header>
