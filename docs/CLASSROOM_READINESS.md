@@ -73,7 +73,7 @@ The live coach supports real-time spoken conversation through WebRTC, learner-le
 
 ### Required release verification
 
-- [ ] Configure a server-side `OPENAI_API_KEY` with Realtime API access and verify `/api/tutor/realtime-session` returns a short-lived client secret.
+- [ ] Configure a server-side `GEMINI_API_KEY` with Gemini Live access and verify `/api/tutor/realtime-session` returns a short-lived client secret.
 - [ ] Configure MongoDB Atlas, `AUTH_SECRET`, and production HTTPS.
 - [ ] Test voice call, mute, interruption, end-call cleanup, camera pause/resume, and recap generation on physical iPadOS/Safari and desktop browsers.
 - [ ] Confirm that provider usage limits, cost alerts, and data-processing/privacy notices are appropriate for the intended school and age group.
