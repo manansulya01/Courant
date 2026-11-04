@@ -15,6 +15,8 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 9. To show a continuously animated AI teacher during video calls, configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` from your LiveAvatar account. Create a reusable context with an encouraging English-coach prompt and opening greeting, then use its context ID. The API key stays server-side; only a short-lived session token is issued to the browser.
 10. Run `npm run dev` and open `http://localhost:3000`.
 
+Animated teacher video calls require the learner to be signed in before the server issues a LiveAvatar session token. If the avatar provider is not configured or temporarily unavailable, the live voice conversation continues and the call screen explains that the animated teacher could not connect.
+
 ## Main experiences
 
 - `/labs` and `/labs/[slug]` — scenario library and AI practice room
