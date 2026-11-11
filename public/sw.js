@@ -5,8 +5,20 @@ const OFFLINE_ROUTE = "/offline-practice";
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
-    const cache = await caches.open(PAGE_CACHE);
-    await cache.addAll([OFFLINE_ROUTE, "/manifest.webmanifest"]);
+    const pages = await caches.open(PAGE_CACHE);
+    const response = await fetch(OFFLINE_ROUTE, { headers: { Accept: "text/html" } });
+    if (!response.ok) throw new Error("Could not pre-cache the offline practice page.");
+    await pages.put(OFFLINE_ROUTE, response.clone());
+    await pages.addAll(["/manifest.webmanifest", "/icon.svg"]);
+
+    // Pre-cache the page's own Next.js runtime, scripts and styles so its
+    // controls can hydrate after the first install, even before a second visit.
+    const html = await response.text();
+    const assetPaths = [...new Set([...html.matchAll(/(?:src|href)="([^"]*\/_next\/static\/[^"]+)"/g)]
+      .map(match => match[1].replace(/&amp;/g, "&").split("?")[0])
+      .filter(path => path.startsWith("/_next/static/")))];
+    const assets = await caches.open(ASSET_CACHE);
+    await Promise.allSettled(assetPaths.map(path => assets.add(path)));
     await self.skipWaiting();
   })());
 });
