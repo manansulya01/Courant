@@ -29,6 +29,7 @@ export default function OfflinePracticePage() {
   const [selected, setSelected] = useState(lessons[0].id);
   const [answer, setAnswer] = useState("");
   const [saved, setSaved] = useState(false);
+  const [backupStatus, setBackupStatus] = useState("");
 
   useEffect(() => {
     try {
@@ -76,6 +77,70 @@ export default function OfflinePracticePage() {
     persist(next, answer);
   }
 
+  function exportProgress() {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) as { answers?: Record<string, string> } : {};
+      const backup = {
+        app: "Courant",
+        format: "courant-offline-practice",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        completed,
+        answers: parsed.answers && typeof parsed.answers === "object" ? parsed.answers : { [selected]: answer },
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `courant-practice-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setBackupStatus("Backup downloaded. Keep it somewhere safe to restore your work later.");
+    } catch {
+      setBackupStatus("Your browser could not create a backup. Check storage permissions and try again.");
+    }
+  }
+
+  async function importProgress(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      setBackupStatus("That file is too large. Choose a Courant backup smaller than 1 MB.");
+      return;
+    }
+    try {
+      const data = JSON.parse(await file.text()) as {
+        format?: unknown;
+        version?: unknown;
+        completed?: unknown;
+        answers?: unknown;
+      };
+      if (data.format !== "courant-offline-practice" || data.version !== 1) {
+        throw new Error("This is not a supported Courant practice backup.");
+      }
+      if (!Array.isArray(data.completed) || !data.answers || typeof data.answers !== "object" || Array.isArray(data.answers)) {
+        throw new Error("The backup file is incomplete or invalid.");
+      }
+      const validIds = new Set(lessons.map(item => item.id));
+      const restoredCompleted = [...new Set(data.completed.filter((id): id is string => typeof id === "string" && validIds.has(id)))];
+      const restoredAnswers: Record<string, string> = {};
+      for (const [id, value] of Object.entries(data.answers as Record<string, unknown>)) {
+        if (validIds.has(id) && typeof value === "string") restoredAnswers[id] = value.slice(0, 20000);
+      }
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ completed: restoredCompleted, answers: restoredAnswers }));
+      setCompleted(restoredCompleted);
+      setAnswer(restoredAnswers[selected] || "");
+      setSaved(true);
+      setBackupStatus(`Restored ${restoredCompleted.length} completed lessons and ${Object.keys(restoredAnswers).length} saved drafts on this device.`);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : "Could not read that backup file.");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[var(--paper)] px-4 py-8 sm:px-6 sm:py-12">
       <div className="mx-auto max-w-6xl">
@@ -92,6 +157,21 @@ export default function OfflinePracticePage() {
             <p className="text-2xl font-semibold tabular-nums">{Math.round(completed.length / lessons.length * 100)}%</p>
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--line)]"><div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${completed.length / lessons.length * 100}%` }} /></div>
+        </section>
+
+        <section className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5">
+          <div className="min-w-0">
+            <h2 className="font-semibold">Keep a copy of your learning</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">Export your drafts and progress, or restore them on another device. Your backup stays under your control.</p>
+            {backupStatus && <p className="mt-2 text-xs text-[var(--accent)]" role="status">{backupStatus}</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={exportProgress} className="rounded-full border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-[var(--paper)]">Download backup</button>
+            <label className="cursor-pointer rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              Restore backup
+              <input type="file" accept="application/json,.json" onChange={importProgress} className="sr-only" aria-label="Choose a Courant practice backup" />
+            </label>
+          </div>
         </section>
 
         <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
@@ -134,7 +214,7 @@ export default function OfflinePracticePage() {
           <div><h2 className="font-semibold">Want a conversation partner?</h2><p className="mt-1 text-sm text-[var(--muted)]">Try the optional on-device AI tutor. It needs a compatible browser and a one-time model download.</p></div>
           <Link href="/local-tutor" className="rounded-full border border-[var(--line)] px-5 py-3 text-sm font-semibold hover:bg-[var(--paper)]">Open local tutor ↗</Link>
         </section>
-        <p className="mt-6 text-xs leading-6 text-[var(--muted)]">This mode is designed for individual practice. Progress is stored only in this browser; it does not sync across devices, create teacher accounts, or replace classroom assignments. Clearing browser data will remove saved drafts and progress.</p>
+        <p className="mt-6 text-xs leading-6 text-[var(--muted)]">This mode is designed for individual practice. Progress is stored only in this browser; it does not sync automatically, create teacher accounts, or replace classroom assignments. Download a backup before clearing browser data or moving to another device.</p>
       </div>
     </main>
   );
