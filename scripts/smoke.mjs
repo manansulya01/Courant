@@ -32,6 +32,9 @@ for (const path of [
   "/labs", "/labs/confident-introduction", "/talk", "/offline-practice", "/local-tutor", "/login", "/signup", "/dashboard",
   "/teacher", "/creator", "/practice-plan", "/forgot-password", "/reset-password", "/settings",
 ]) await check(path, 200);
+const localTutor = await check("/local-tutor", 200);
+const localTutorHtml = await localTutor.text();
+if (!localTutorHtml.includes("COURANT · LOCAL TEACHER") || !localTutorHtml.includes("not analysed by the local model")) throw new Error("Local teacher preview or camera privacy disclosure is missing.");
 const manifest = await check("/manifest.webmanifest", 200);
 if (!(manifest.headers.get("content-type") || "").includes("json")) throw new Error("PWA manifest must be served as JSON.");
 const icon = await check("/icon.svg", 200);
