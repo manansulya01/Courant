@@ -144,7 +144,6 @@ export default function OfflineClassroomPage() {
     event.target.value = "";
     if (!assignment || !files.length) return;
     setBusy(true);
-    let accepted = 0;
     const errors: string[] = [];
     const incoming: ImportedSubmission[] = [];
     for (const file of files) {
@@ -171,14 +170,15 @@ export default function OfflineClassroomPage() {
         errors.push(`${file.name}: ${error instanceof Error ? error.message : "invalid file"}`);
       }
     }
-    setSubmissions(current => {
-      const known = new Set(current.map(item => item.id));
-      const fresh = incoming.filter(item => !known.has(item.id));
-      accepted = fresh.length;
-      return [...current, ...fresh].sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
+    const known = new Set(submissions.map(item => item.id));
+    const fresh = incoming.filter(item => {
+      if (known.has(item.id)) return false;
+      known.add(item.id);
+      return true;
     });
+    setSubmissions(current => [...current, ...fresh.filter(item => !current.some(existing => existing.id === item.id))].sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)));
     setBusy(false);
-    setStatus(`${accepted} new submission(s) imported.${errors.length ? ` ${errors.length} file(s) skipped: ${errors.slice(0, 3).join(" · ")}` : ""}`);
+    setStatus(`${fresh.length} new submission(s) imported.${errors.length ? ` ${errors.length} file(s) skipped: ${errors.slice(0, 3).join(" · ")}` : ""}`);
   }
 
   function exportSubmissions() {
