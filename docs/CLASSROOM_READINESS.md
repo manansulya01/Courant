@@ -56,6 +56,16 @@ This checklist separates repository checks from launch tasks that require real c
 - [ ] Review child safety/content moderation, escalation language, teacher oversight, accessibility and data subject request handling.
 - [ ] Run a limited pilot with non-sensitive test accounts, an incident response plan and an explicit rollback owner before enrolling real students.
 
+## No-backend fallback modes
+
+- [x] `/offline-practice` provides individual lessons without sign-in, API calls, or database access; progress and drafts are stored locally in the browser.
+- [x] Learners can export and restore a versioned local progress backup to move between devices.
+- [x] `/offline-classroom` provides a manual assignment-file workflow: teachers export assignment JSON, learners import and complete it, and teachers import submissions and export a class bundle.
+- [ ] Pilot file exchange with teachers and learners on the actual school devices and validate the school-approved file-sharing process.
+- [ ] Confirm the school's privacy and retention requirements before using any learner-identifying labels in exported files.
+
+These fallbacks do not depend on the broken database connection or hosted AI provider. They are intentionally not described as synced accounts, secure student identity, automatic grading, or a managed classroom platform.
+
 ## Required environment configuration
 
 - `MONGODB_URI`, `MONGODB_DB`
