@@ -12,6 +12,7 @@ export default function Navbar() {
     ["For schools", "#schools"],
     ["Local tutor", "/local-tutor"],
     ["Offline practice", "/offline-practice"],
+    ["Classroom kit", "/offline-classroom"],
   ];
 
   return (
