@@ -150,10 +150,23 @@ export default function OfflineClassroomPage() {
     for (const file of files) {
       try {
         const data = await readJson(file);
-        if (!isSubmission(data)) throw new Error("Unsupported submission file.");
-        if (data.assignmentId !== assignment.id) throw new Error("This submission belongs to a different assignment.");
-        if (!data.response.trim()) throw new Error("The response is empty.");
-        incoming.push({ ...data, learnerLabel: data.learnerLabel.slice(0, 80), response: data.response.slice(0, 20000), fileName: file.name });
+        let records: unknown[] = [];
+        if (isSubmission(data)) {
+          records = [data];
+        } else if (data && typeof data === "object" && !Array.isArray(data)) {
+          const bundle = data as { format?: unknown; version?: unknown; assignment?: unknown; submissions?: unknown };
+          if (bundle.format === "courant-offline-submission-bundle" && bundle.version === 1 &&
+            isAssignment(bundle.assignment) && bundle.assignment.id === assignment.id && Array.isArray(bundle.submissions)) {
+            records = bundle.submissions;
+          }
+        }
+        if (!records.length) throw new Error("Unsupported submission or class backup file.");
+        for (const record of records) {
+          if (!isSubmission(record)) throw new Error("A submission in this file is invalid.");
+          if (record.assignmentId !== assignment.id) throw new Error("A submission belongs to a different assignment.");
+          if (!record.response.trim()) throw new Error("A response is empty.");
+          incoming.push({ ...record, learnerLabel: record.learnerLabel.slice(0, 80), response: record.response.slice(0, 20000), fileName: file.name });
+        }
       } catch (error) {
         errors.push(`${file.name}: ${error instanceof Error ? error.message : "invalid file"}`);
       }
