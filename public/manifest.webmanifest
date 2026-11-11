@@ -1,0 +1,20 @@
+{
+  "name": "Courant — English practice",
+  "short_name": "Courant",
+  "description": "Build confidence in English, one conversation at a time.",
+  "start_url": "/offline-practice",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f1",
+  "theme_color": "#315b4c",
+  "orientation": "any",
+  "categories": ["education", "learning"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

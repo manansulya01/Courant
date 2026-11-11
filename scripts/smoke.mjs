@@ -32,6 +32,13 @@ for (const path of [
   "/labs", "/labs/confident-introduction", "/talk", "/offline-practice", "/local-tutor", "/login", "/signup", "/dashboard",
   "/teacher", "/creator", "/practice-plan", "/forgot-password", "/reset-password", "/settings",
 ]) await check(path, 200);
+const manifest = await check("/manifest.webmanifest", 200);
+if (!(manifest.headers.get("content-type") || "").includes("json")) throw new Error("PWA manifest must be served as JSON.");
+const icon = await check("/icon.svg", 200);
+if (!(icon.headers.get("content-type") || "").includes("image/svg+xml")) throw new Error("PWA icon must be served as SVG.");
+const worker = await check("/sw.js", 200);
+const workerSource = await worker.text();
+if (!workerSource.includes("/offline-practice") || !workerSource.includes("/api/")) throw new Error("Offline worker is missing route scope or private API exclusions.");
 await check("/not-a-real-courant-route", 404);
 const health = await check("/api/health", 503);
 if (health.headers.get("cache-control") !== "no-store") throw new Error("API responses must disable caching.");
@@ -57,7 +64,6 @@ await check("/api/tutor/realtime-session", 503, {
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
   body: JSON.stringify({ mode: "voice", scenario: "Smoke test" }),
 });
-// Anonymous avatar-token requests must be rejected before checking provider configuration.
 await check("/api/tutor/avatar-token", 401, {
   method: "POST",
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" },
@@ -66,10 +72,7 @@ await check("/api/tutor/avatar-token", 403, {
   method: "POST",
   headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
 });
-await check("/api/tutor/transcribe", 503, {
-  method: "POST",
-  headers: {},
-});
+await check("/api/tutor/transcribe", 503, { method: "POST", headers: {} });
 await check("/api/account", 403, {
   method: "DELETE",
   headers: { "Content-Type": "application/json", "Origin": "https://attacker.example" },
