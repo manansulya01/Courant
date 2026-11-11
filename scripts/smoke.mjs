@@ -35,6 +35,9 @@ for (const path of [
 const localTutor = await check("/local-tutor", 200);
 const localTutorHtml = await localTutor.text();
 if (!localTutorHtml.includes("COURANT · LOCAL TEACHER") || !localTutorHtml.includes("not analysed by the local model")) throw new Error("Local teacher preview or camera privacy disclosure is missing.");
+const practice = await check("/offline-practice", 200);
+const practiceHtml = await practice.text();
+if (!practiceHtml.includes("Download backup") || !practiceHtml.includes("Restore backup")) throw new Error("Offline progress backup controls are missing.");
 const manifest = await check("/manifest.webmanifest", 200);
 if (!(manifest.headers.get("content-type") || "").includes("json")) throw new Error("PWA manifest must be served as JSON.");
 const icon = await check("/icon.svg", 200);
