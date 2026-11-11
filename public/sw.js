@@ -33,7 +33,7 @@ self.addEventListener("fetch", event => {
       const cached = await cache.match(request);
       if (cached) return cached;
       const response = await fetch(request);
-      if (response.ok) cache.put(request, response.clone());
+      if (response.ok) await cache.put(request, response.clone());
       return response;
     })());
     return;
@@ -44,10 +44,12 @@ self.addEventListener("fetch", event => {
       const cache = await caches.open(PAGE_CACHE);
       try {
         const response = await fetch(request);
-        if (response.ok) cache.put(OFFLINE_ROUTE, response.clone());
+        if (response.ok) await cache.put(OFFLINE_ROUTE, response.clone());
         return response;
       } catch {
-        return (await cache.match(OFFLINE_ROUTE)) || Response.error();
+        // Ignore Vary headers because the pre-cached install request and a real
+        // browser navigation carry different Next.js request headers.
+        return (await cache.match(OFFLINE_ROUTE, { ignoreVary: true })) || Response.error();
       }
     })());
   }
