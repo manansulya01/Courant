@@ -34,6 +34,8 @@ for (const path of [
 ]) await check(path, 200);
 const manifest = await check("/manifest.webmanifest", 200);
 if (!(manifest.headers.get("content-type") || "").includes("json")) throw new Error("PWA manifest must be served as JSON.");
+const icon = await check("/icon.svg", 200);
+if (!(icon.headers.get("content-type") || "").includes("image/svg+xml")) throw new Error("PWA icon must be served as SVG.");
 const worker = await check("/sw.js", 200);
 const workerSource = await worker.text();
 if (!workerSource.includes("/offline-practice") || !workerSource.includes("/api/")) throw new Error("Offline worker is missing route scope or private API exclusions.");
