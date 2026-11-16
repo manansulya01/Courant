@@ -1,153 +1,82 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
-import { getCurrentUser } from "@/lib/auth";
-import { getDatabase, getMongoClient } from "@/lib/mongodb";
+import { getCurrentUser, createSupabaseServerClient } from "@/lib/auth";
 import { readBoundedJson } from "@/lib/bounded-json";
-import { ObjectId } from "mongodb";
 import { generateClassJoinCode } from "@/lib/class-code";
-
 export const runtime = "nodejs";
-
 async function teacher() {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Sign in to access teacher tools." }, { status: 401 }) };
   if (!["teacher", "admin"].includes(user.role)) return { error: NextResponse.json({ error: "Teacher permissions are required." }, { status: 403 }) };
   return { user };
 }
-
-async function mutationRateLimit(request: Request, scope: string) {
-  try {
-    const rate = await checkRateLimit(request, scope, 40, 60);
-    if (!rate.allowed) {
-      return NextResponse.json(
-        { error: "Too many requests. Please wait before trying again." },
-        { status: 429, headers: { "Retry-After": String(rate.retryAfter || 60) } },
-      );
-    }
-    return null;
-  } catch {
-    return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
-  }
+async function limited(request: Request, scope: string) {
+  try { const r = await checkRateLimit(request, scope, 40, 60); if (!r.allowed) return NextResponse.json({ error: "Too many requests." }, { status: 429, headers: { "Retry-After": String(r.retryAfter || 60) } }); return null; }
+  catch { return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 }); }
 }
-
 export async function GET() {
-  const access = await teacher();
-  if ("error" in access) return access.error;
+  const access = await teacher(); if ("error" in access) return access.error;
   try {
-    const db = await getDatabase();
-    const classes = await db.collection("classes").find({ teacherId: access.user.id }).sort({ createdAt: -1 }).limit(100).toArray();
-    const assignments = await db.collection("assignments").find({ teacherId: access.user.id }).sort({ createdAt: -1 }).limit(100).toArray();
-    const classIds = classes.map((c) => c._id.toString());
-    const progress = classIds.length ? await db.collection("learningProgress").aggregate([
-      { $match: { classId: { $in: classIds } } },
-      { $group: { _id: "$userId", sessions: { $sum: 1 }, minutes: { $sum: "$minutes" }, lastActive: { $max: "$createdAt" } } },
-    ]).toArray() : [];
+    const s = await createSupabaseServerClient();
+    const { data: classes, error: classError } = await s.from("classes").select("id,name,description,join_code,created_at,class_members(count)").eq("teacher_id", access.user.id).order("created_at", { ascending: false }).limit(100);
+    if (classError) throw classError;
+    const { data: assignments, error: assignmentError } = await s.from("assignments").select("id,class_id,teacher_id,title,instructions,due_at,created_at").eq("teacher_id", access.user.id).order("created_at", { ascending: false }).limit(100);
+    if (assignmentError) throw assignmentError;
+    const ids = (classes || []).map(c => c.id);
+    const { data: memberships, error: memberError } = ids.length ? await s.from("class_members").select("class_id,student_id,joined_at").in("class_id", ids).limit(2000) : { data: [], error: null };
+    if (memberError) throw memberError;
     return NextResponse.json({
-      classes: classes.map(({ _id, ...c }) => ({ ...c, id: _id.toString() })),
-      assignments: assignments.map(({ _id, ...a }) => ({ ...a, id: _id.toString() })),
-      activity: progress.map((p) => ({ userId: p._id, sessions: p.sessions, minutes: p.minutes, lastActive: p.lastActive })),
+      classes: (classes || []).map(c => ({ id:c.id, name:c.name, description:c.description, joinCode:c.join_code, studentIds:(memberships || []).filter(m => m.class_id === c.id).map(m => m.student_id), studentCount:Array.isArray(c.class_members)?c.class_members[0]?.count||0:0, createdAt:c.created_at })),
+      assignments: (assignments || []).map(a => ({ id:a.id, classId:a.class_id, teacherId:a.teacher_id, title:a.title, instructions:a.instructions, dueDate:a.due_at, createdAt:a.created_at })),
+      activity: (memberships || []).map(m => ({ userId:m.student_id, classId:m.class_id, joinedAt:m.joined_at, sessions:0, minutes:0 }))
     }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Could not load teacher workspace." }, { status: 503, headers: { "Cache-Control": "no-store" } });
-  }
+  } catch { return NextResponse.json({ error: "Could not load teacher workspace." }, { status: 503 }); }
 }
-
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
-  const limited = await mutationRateLimit(request, "teacher-write");
-  if (limited) return limited;
-  const parsed = await readBoundedJson(request, 16_000);
-  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
-  const body = parsed.value;
-  const access = await teacher();
-  if ("error" in access) return access.error;
-
+  const rate = await limited(request, "teacher-write"); if (rate) return rate;
+  const parsed = await readBoundedJson(request, 16_000); if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+  const access = await teacher(); if ("error" in access) return access.error;
   try {
-    const db = await getDatabase();
-    const now = new Date();
-    if (body.type === "class") {
-      const name = typeof body.name === "string" ? body.name.trim().slice(0, 100) : "";
-      const description = typeof body.description === "string" ? body.description.trim().slice(0, 500) : "";
+    const s = await createSupabaseServerClient(); const now = new Date().toISOString();
+    if (parsed.value.type === "class") {
+      const name = typeof parsed.value.name === "string" ? parsed.value.name.trim().slice(0,100) : "";
+      const description = typeof parsed.value.description === "string" ? parsed.value.description.trim().slice(0,500) : "";
       if (name.length < 2) return NextResponse.json({ error: "Class name must be at least 2 characters." }, { status: 400 });
-      const joinCode = generateClassJoinCode();
-      const doc = { teacherId: access.user.id, name, description, joinCode, studentIds: [] as string[], createdAt: now, updatedAt: now };
-      const result = await db.collection("classes").insertOne(doc);
-      return NextResponse.json({ class: { ...doc, id: result.insertedId.toString() } }, { status: 201, headers: { "Cache-Control": "no-store" } });
+      let saved = null; let failure = null;
+      for (let i=0;i<4;i++) {
+        const { data, error } = await s.from("classes").insert({ teacher_id:access.user.id, name, description, join_code:generateClassJoinCode(), created_at:now, updated_at:now }).select("id,name,description,join_code,created_at").single();
+        if (!error) { saved=data; break; } failure=error;
+      }
+      if (!saved) throw failure || new Error("Could not create class.");
+      return NextResponse.json({ class:{ id:saved.id, name:saved.name, description:saved.description, joinCode:saved.join_code, studentCount:0, createdAt:saved.created_at } }, { status:201, headers:{"Cache-Control":"no-store"} });
     }
-    if (body.type === "assignment") {
-      const title = typeof body.title === "string" ? body.title.trim().slice(0, 120) : "";
-      const instructions = typeof body.instructions === "string" ? body.instructions.trim().slice(0, 3000) : "";
-      const classId = typeof body.classId === "string" && ObjectId.isValid(body.classId) ? body.classId : "";
-      const rawDueDate = typeof body.dueDate === "string" && body.dueDate ? new Date(body.dueDate) : null;
-      if (title.length < 2 || !instructions || !classId) return NextResponse.json({ error: "Add a title, instructions, and class." }, { status: 400 });
-      const cls = await db.collection("classes").findOne({ _id: new ObjectId(classId), teacherId: access.user.id }, { projection: { _id: 1 } });
-      if (!cls) return NextResponse.json({ error: "Class not found." }, { status: 404 });
-      const dueDate = rawDueDate && !Number.isNaN(rawDueDate.getTime()) ? rawDueDate : null;
-      const doc = { teacherId: access.user.id, classId, title, instructions, dueDate, createdAt: now, updatedAt: now };
-      const result = await db.collection("assignments").insertOne(doc);
-      return NextResponse.json({ assignment: { ...doc, id: result.insertedId.toString() } }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    if (parsed.value.type === "assignment") {
+      const title = typeof parsed.value.title === "string" ? parsed.value.title.trim().slice(0,120) : "";
+      const instructions = typeof parsed.value.instructions === "string" ? parsed.value.instructions.trim().slice(0,3000) : "";
+      const classId = typeof parsed.value.classId === "string" ? parsed.value.classId : "";
+      const due = typeof parsed.value.dueDate === "string" && parsed.value.dueDate ? new Date(parsed.value.dueDate) : null;
+      if (title.length < 2 || !instructions || !/^[0-9a-f-]{36}$/i.test(classId)) return NextResponse.json({ error: "Add a title, instructions, and class." }, { status:400 });
+      const { data: cls, error: classError } = await s.from("classes").select("id").eq("id",classId).eq("teacher_id",access.user.id).maybeSingle();
+      if (classError || !cls) return NextResponse.json({ error:"Class not found." }, {status:404});
+      const { data, error } = await s.from("assignments").insert({ teacher_id:access.user.id,class_id:classId,title,instructions,due_at:due&&!Number.isNaN(due.getTime())?due.toISOString():null,created_at:now,updated_at:now }).select("id,class_id,teacher_id,title,instructions,due_at,created_at").single();
+      if (error) throw error;
+      return NextResponse.json({ assignment:{id:data.id,classId:data.class_id,teacherId:data.teacher_id,title:data.title,instructions:data.instructions,dueDate:data.due_at,createdAt:data.created_at} }, {status:201});
     }
-    return NextResponse.json({ error: "Choose class or assignment." }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: "Could not save teacher workspace changes." }, { status: 503 });
-  }
+    return NextResponse.json({ error:"Choose class or assignment." }, {status:400});
+  } catch { return NextResponse.json({ error:"Could not save teacher workspace changes." }, {status:503}); }
 }
-
 export async function DELETE(request: Request) {
-  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
-  const limited = await mutationRateLimit(request, "teacher-delete");
-  if (limited) return limited;
-  const parsed = await readBoundedJson(request, 4_000);
-  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
-  const body = parsed.value;
-  if (typeof body.id !== "string" || !ObjectId.isValid(body.id) || !["class", "assignment"].includes(String(body.type))) {
-    return NextResponse.json({ error: "Invalid item." }, { status: 400 });
-  }
-  const access = await teacher();
-  if ("error" in access) return access.error;
-
-  const client = await getMongoClient();
-  const session = client.startSession();
+  if (!isSameOrigin(request)) return NextResponse.json({error:"Request origin was not accepted."},{status:403});
+  const rate=await limited(request,"teacher-delete");if(rate)return rate;
+  const parsed=await readBoundedJson(request,4000);if(!parsed.ok)return NextResponse.json({error:parsed.error},{status:parsed.status});
+  const id=typeof parsed.value.id==="string"?parsed.value.id:"";const type=parsed.value.type;
+  if(!/^[0-9a-f-]{36}$/i.test(id)||!["class","assignment"].includes(String(type)))return NextResponse.json({error:"Invalid item."},{status:400});
+  const access=await teacher();if("error" in access)return access.error;
   try {
-    const db = client.db(process.env.MONGODB_DB || "courant");
-    let notFound = false;
-    await session.withTransaction(async () => {
-      if (body.type === "assignment") {
-        const assignment = await db.collection("assignments").findOne(
-          { _id: new ObjectId(body.id as string), teacherId: access.user.id },
-          { projection: { _id: 1 }, session },
-        );
-        if (!assignment) {
-          notFound = true;
-          return;
-        }
-        await db.collection("assignmentSubmissions").deleteMany({ assignmentId: body.id }, { session });
-        await db.collection("assignments").deleteOne({ _id: assignment._id, teacherId: access.user.id }, { session });
-        return;
-      }
-
-      const cls = await db.collection("classes").findOne(
-        { _id: new ObjectId(body.id as string), teacherId: access.user.id },
-        { projection: { _id: 1 }, session },
-      );
-      if (!cls) {
-        notFound = true;
-        return;
-      }
-      const classId = cls._id.toString();
-      const assignments = await db.collection("assignments")
-        .find({ classId, teacherId: access.user.id }, { projection: { _id: 1 }, session }).toArray();
-      const assignmentIds = assignments.map((item) => item._id.toString());
-      await db.collection("assignmentSubmissions").deleteMany({ assignmentId: { $in: assignmentIds } }, { session });
-      await db.collection("assignments").deleteMany({ classId, teacherId: access.user.id }, { session });
-      await db.collection("learningProgress").updateMany({ classId }, { $unset: { classId: "" } }, { session });
-      await db.collection("classes").deleteOne({ _id: cls._id, teacherId: access.user.id }, { session });
-    });
-    if (notFound) return NextResponse.json({ error: "Item not found." }, { status: 404, headers: { "Cache-Control": "no-store" } });
-    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Could not delete item. No changes were committed." }, { status: 503, headers: { "Cache-Control": "no-store" } });
-  } finally {
-    await session.endSession();
-  }
+    const s=await createSupabaseServerClient();
+    if(type==="assignment"){const {data,error}=await s.from("assignments").delete().eq("id",id).eq("teacher_id",access.user.id).select("id").maybeSingle();if(error)throw error;if(!data)return NextResponse.json({error:"Assignment not found."},{status:404});}
+    else {const {data,error}=await s.from("classes").delete().eq("id",id).eq("teacher_id",access.user.id).select("id").maybeSingle();if(error)throw error;if(!data)return NextResponse.json({error:"Class not found."},{status:404});}
+    return NextResponse.json({ok:true});
+  } catch {return NextResponse.json({error:"Could not delete this item."},{status:503});}
 }

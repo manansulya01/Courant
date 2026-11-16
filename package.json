@@ -10,12 +10,13 @@
     "test:security": "node --experimental-strip-types --test scripts/bounded-json.test.mjs scripts/class-code.test.mjs"
   },
   "dependencies": {
-    "mongodb": "^6.18.0",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
     "@heygen/liveavatar-web-sdk": "^0.0.19",
-    "@mlc-ai/web-llm": "^0.2.80"
+    "@mlc-ai/web-llm": "^0.2.80",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.0"
   },
   "devDependencies": {
     "@types/node": "latest",

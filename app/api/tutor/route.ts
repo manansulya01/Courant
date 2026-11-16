@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
-import { getCurrentUser } from "@/lib/auth";
-import { getDatabase } from "@/lib/mongodb";
+import { getCurrentUser, createSupabaseServerClient } from "@/lib/auth";
 import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
@@ -68,11 +67,12 @@ export async function POST(request: Request) {
     try {
       const user = await getCurrentUser();
       if (user) {
-        const recent = await (await getDatabase()).collection("learningProgress")
-          .find({ userId: user.id }).sort({ createdAt: -1 }).limit(5).toArray();
-        if (recent.length) {
+        const supabase = await createSupabaseServerClient();
+        const { data: recent } = await supabase.from("learning_progress")
+          .select("lesson_id,status,score,data").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(5);
+        if (recent?.length) {
           learnerContext = "Recent saved practice (use as a soft guide, never as a diagnosis): " +
-            recent.map(r => JSON.stringify({ lesson: r.lesson, skill: r.skill, score: r.score, completed: r.completed })).join("; ");
+            recent.map(r => JSON.stringify({ lesson: r.lesson_id, skill: r.data?.skill, score: r.score, completed: r.status === "completed" })).join("; ");
         }
       }
     } catch {
