@@ -24,15 +24,12 @@ export async function POST(request: Request) {
   if (requestedRole === "teacher" && (!inviteCode || inviteCode.length > 100)) return NextResponse.json({ error: "A valid school-issued teacher invitation is required." }, { status: 403 });
   try {
     const supabase = await createSupabaseServerClient();
-    if (requestedRole === "teacher") {
-      const { data: validInvite, error: inviteError } = await supabase.rpc("check_teacher_invite", { p_code: inviteCode });
-      if (inviteError || validInvite !== true) return NextResponse.json({ error: "That teacher invitation is invalid, expired, or already used." }, { status: 403 });
-    }
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, ...(requestedRole === "teacher" ? { teacher_invite_code: inviteCode } : {}) } } });
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, requested_role: requestedRole, ...(requestedRole === "teacher" ? { teacher_invite_code: inviteCode } : {}) } } });
     if (error) return NextResponse.json({ error: error.message.includes("already registered") ? "An account with that email already exists." : "Could not create your account. Check your details and try again." }, { status: error.message.includes("already registered") ? 409 : 400 });
     if (!data.user) return NextResponse.json({ error: "Account creation could not be confirmed. Please try again." }, { status: 503 });
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
-    const role = profile?.role === "teacher" ? "teacher" : requestedRole === "teacher" ? "teacher" : "student";
+    const role = profile?.role === "teacher" ? "teacher" : "student";
+    if (requestedRole === "teacher" && data.session && role !== "teacher") { await supabase.auth.signOut(); return NextResponse.json({ error: "That teacher invitation is invalid, expired, or already used." }, { status: 403 }); }
     return NextResponse.json({ user: { id: data.user.id, name, email, role }, requiresEmailConfirmation: !data.session, message: data.session ? "Your account is ready." : "Check your email to confirm your account before signing in." }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Account creation is temporarily unavailable." }, { status: 503 }); }
 }
