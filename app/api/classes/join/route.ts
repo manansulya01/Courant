@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   if (code.length < 4 || code.length > 12) return NextResponse.json({ error: "Enter a valid class code." }, { status: 400 });
   try {
     const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.rpc("join_class_by_code", { p_code: code });
+    const { data, error } = await supabase.rpc("join_class_by_code", { p_code: code, p_secret: process.env.COURANT_RATE_LIMIT_SECRET });
     if (error || !data?.[0]) return NextResponse.json({ error: "That class code was not found or could not be joined." }, { status: 404 });
     return NextResponse.json({ ok: true, class: { id: data[0].class_id, name: data[0].class_name } }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Could not join class." }, { status: 503 }); }
