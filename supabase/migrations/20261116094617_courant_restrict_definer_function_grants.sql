@@ -1,0 +1,10 @@
+revoke execute on function public.check_teacher_invite(text) from anon, public, authenticated;
+revoke execute on function public.delete_my_account() from anon, public;
+grant execute on function public.delete_my_account() to authenticated;
+revoke execute on function public.handle_new_user() from anon, public, authenticated;
+revoke execute on function public.is_teacher_of_class(uuid) from anon, public;
+grant execute on function public.is_teacher_of_class(uuid) to authenticated;
+revoke execute on function public.join_class_by_code(text) from anon, public;
+grant execute on function public.join_class_by_code(text) to authenticated;
+revoke execute on function public.consume_rate_limit(text,integer,integer) from public;
+grant execute on function public.consume_rate_limit(text,integer,integer) to anon, authenticated;
