@@ -30,7 +30,7 @@ if (home.headers.get("x-frame-options") !== "DENY") throw new Error("Missing X-F
 if (home.headers.get("x-content-type-options") !== "nosniff") throw new Error("Missing X-Content-Type-Options security header.");
 for (const path of [
   "/labs", "/labs/confident-introduction", "/talk", "/offline-practice", "/offline-classroom", "/local-tutor", "/login", "/signup", "/dashboard",
-  "/teacher", "/creator", "/practice-plan", "/forgot-password", "/reset-password", "/settings",
+  "/teacher", "/creator", "/practice-plan", "/live-call", "/forgot-password", "/reset-password", "/settings",
 ]) await check(path, 200);
 const localTutor = await check("/local-tutor", 200);
 const localTutorHtml = await localTutor.text();
