@@ -1,103 +1,30 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, createSupabaseServerClient } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
-import { getDatabase, getMongoClient } from "@/lib/mongodb";
 import { readBoundedJson } from "@/lib/bounded-json";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
 export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Sign in to export your data." }, { status: 401 });
+  const user=await getCurrentUser(); if(!user)return NextResponse.json({error:"Sign in to export your data."},{status:401});
   try {
-    const db = await getDatabase();
-    const [progress, portfolio, submissions, memberships, classes, assignments] = await Promise.all([
-      db.collection("learningProgress").find({ userId: user.id }).limit(5000).toArray(),
-      db.collection("portfolioItems").find({ userId: user.id }).limit(1000).toArray(),
-      db.collection("assignmentSubmissions").find({ userId: user.id }).limit(1000).toArray(),
-      db.collection("classes").find({ studentIds: user.id }, { projection: { name: 1, description: 1, teacherId: 1, createdAt: 1 } }).limit(500).toArray(),
-      user.role === "teacher" || user.role === "admin" ? db.collection("classes").find({ teacherId: user.id }).limit(500).toArray() : Promise.resolve([]),
-      user.role === "teacher" || user.role === "admin" ? db.collection("assignments").find({ teacherId: user.id }).limit(2000).toArray() : Promise.resolve([]),
+    const s=await createSupabaseServerClient();
+    const [progress,portfolio,submissions,memberships,classes,assignments]=await Promise.all([
+      s.from("learning_progress").select("*").eq("user_id",user.id).limit(5000),
+      s.from("portfolio_items").select("*").eq("user_id",user.id).limit(1000),
+      s.from("assignment_submissions").select("*").eq("user_id",user.id).limit(1000),
+      s.from("class_members").select("class_id,joined_at").eq("student_id",user.id).limit(500),
+      s.from("classes").select("*").eq("teacher_id",user.id).limit(500),
+      s.from("assignments").select("*").eq("teacher_id",user.id).limit(2000)
     ]);
-    const clean = (items: Array<Record<string, unknown>>) => items.map((document) => {
-      const { _id, ...item } = document;
-      delete item.passwordHash;
-      return { ...item, id: _id instanceof ObjectId ? _id.toString() : undefined };
-    });
-    return NextResponse.json({
-      exportedAt: new Date().toISOString(),
-      profile: user,
-      learningProgress: clean(progress as unknown as Array<Record<string, unknown>>),
-      portfolioItems: clean(portfolio as unknown as Array<Record<string, unknown>>),
-      assignmentSubmissions: clean(submissions as unknown as Array<Record<string, unknown>>),
-      joinedClasses: clean(memberships as unknown as Array<Record<string, unknown>>),
-      teachingClasses: clean(classes as unknown as Array<Record<string, unknown>>),
-      teachingAssignments: clean(assignments as unknown as Array<Record<string, unknown>>),
-    }, { headers: { "Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="courant-data-export.json"' } });
-  } catch {
-    return NextResponse.json({ error: "Could not export account data right now." }, { status: 503 });
-  }
+    for(const result of [progress,portfolio,submissions,memberships,classes,assignments])if(result.error)throw result.error;
+    return NextResponse.json({exportedAt:new Date().toISOString(),profile:user,learningProgress:progress.data,portfolioItems:portfolio.data,assignmentSubmissions:submissions.data,joinedClasses:memberships.data,teachingClasses:classes.data,teachingAssignments:assignments.data},{headers:{"Cache-Control":"no-store","Content-Disposition":'attachment; filename="courant-data-export.json"'}});
+  }catch{return NextResponse.json({error:"Could not export account data right now."},{status:503});}
 }
-
-export async function DELETE(request: Request) {
-  if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Sign in before deleting your account." }, { status: 401 });
-  try {
-    const rate = await checkRateLimit(request, "account-delete", 3, 3600);
-    if (!rate.allowed) return NextResponse.json({ error: "Too many deletion attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 3600) } });
-  } catch {
-    return NextResponse.json({ error: "Request protection is temporarily unavailable." }, { status: 503 });
-  }
-  try {
-    const parsed = await readBoundedJson(request, 4_096);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
-    const body = parsed.value;
-    if (typeof body.confirmEmail !== "string" || body.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
-      return NextResponse.json({ error: "Enter your account email to confirm deletion." }, { status: 400 });
-    }
-    const client = await getMongoClient();
-    const session = client.startSession();
-    try {
-      await session.withTransaction(async () => {
-        const db = client.db(process.env.MONGODB_DB || "courant");
-        const ownedClasses = await db.collection("classes").find(
-          { teacherId: user.id }, { projection: { _id: 1 }, session },
-        ).toArray();
-        const ownedClassIds = ownedClasses.map((item) => item._id.toString());
-        const ownedAssignments = await db.collection("assignments").find(
-          { $or: [{ teacherId: user.id }, { classId: { $in: ownedClassIds } }] },
-          { projection: { _id: 1 }, session },
-        ).toArray();
-        const ownedAssignmentIds = ownedAssignments.map((item) => item._id.toString());
-
-        // Keep transaction operations sequential; the MongoDB driver does not support
-        // parallel operations on one transaction session.
-        await db.collection("learningProgress").deleteMany({ userId: user.id }, { session });
-        await db.collection("portfolioItems").deleteMany({ userId: user.id }, { session });
-        await db.collection("assignmentSubmissions").deleteMany(
-          { $or: [{ userId: user.id }, { assignmentId: { $in: ownedAssignmentIds } }] }, { session },
-        );
-        // Remove outstanding recovery credentials in the same transaction as the account.
-        await db.collection("passwordResetTokens").deleteMany({ userId: user.id }, { session });
-        await db.collection("classes").updateMany(
-          { studentIds: user.id },
-          [{ $set: { studentIds: { $filter: { input: "$studentIds", as: "studentId", cond: { $ne: ["$$studentId", user.id] } } }, updatedAt: new Date() } }],
-          { session },
-        );
-        await db.collection("classes").deleteMany({ teacherId: user.id }, { session });
-        await db.collection("assignments").deleteMany({ _id: { $in: ownedAssignments.map((item) => item._id) } }, { session });
-        await db.collection("users").deleteOne({ _id: new ObjectId(user.id) }, { session });
-      });
-    } finally {
-      await session.endSession();
-    }
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set("courant_session", "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
-    return response;
-  } catch {
-    return NextResponse.json({ error: "Account deletion could not be completed. Contact support before retrying." }, { status: 503 });
-  }
+export async function DELETE(request:Request) {
+  if(!isSameOrigin(request))return NextResponse.json({error:"Request origin was not accepted."},{status:403});
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:"Sign in before deleting your account."},{status:401});
+  try{const r=await checkRateLimit(request,"account-delete",3,3600);if(!r.allowed)return NextResponse.json({error:"Too many deletion attempts. Try again later."},{status:429,headers:{"Retry-After":String(r.retryAfter||3600)}});}catch{return NextResponse.json({error:"Request protection is temporarily unavailable."},{status:503});}
+  const parsed=await readBoundedJson(request,4096);if(!parsed.ok)return NextResponse.json({error:parsed.error},{status:parsed.status});
+  if(typeof parsed.value.confirmEmail!=="string"||parsed.value.confirmEmail.trim().toLowerCase()!==user.email.toLowerCase())return NextResponse.json({error:"Enter your account email to confirm deletion."},{status:400});
+  try{const s=await createSupabaseServerClient();const {error}=await s.rpc("delete_my_account");if(error)throw error;await s.auth.signOut();return NextResponse.json({ok:true},{headers:{"Cache-Control":"no-store"}});}catch{return NextResponse.json({error:"Account deletion could not be completed. Contact support before retrying."},{status:503});}
 }
