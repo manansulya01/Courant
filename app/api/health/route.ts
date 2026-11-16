@@ -13,7 +13,7 @@ export async function GET() {
   } catch (error) { console.error("Courant health check: Supabase unavailable", error instanceof Error ? error.name : "UnknownError"); }
   const authConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
   const rateLimitConfigured = Boolean(process.env.COURANT_RATE_LIMIT_SECRET);
-  const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY);
+  const aiConfigured = Boolean(process.env.GEMINI_API_KEY);
   const ready = database === "ok" && authConfigured && rateLimitConfigured && aiConfigured;
   return NextResponse.json({
     status: ready ? "ok" : "degraded",
