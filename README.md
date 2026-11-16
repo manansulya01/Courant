@@ -11,7 +11,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 5. Student accounts use Supabase Auth email confirmation. Teacher accounts require a one-time school invitation code. Never expose database secret/service-role keys in the browser.
 6. Add a Gemini API key to `GEMINI_API_KEY` for the migrated text/image tutor and Gemini Live calls. Keep it server-side; never prefix it with `NEXT_PUBLIC_`. The default models are configured by `GEMINI_TEXT_MODEL` and `GEMINI_LIVE_MODEL`.
 8. Speech generation and recorded-audio transcription also use Gemini. Configure `GEMINI_TTS_MODEL` (default `gemini-2.5-flash-preview-tts`) and `GEMINI_TRANSCRIPTION_MODEL` (default `gemini-2.5-flash`) if you need to override the defaults. All AI provider keys remain server-side.
-9. To show a continuously animated AI teacher during video calls, configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` (plus optional `LIVEAVATAR_VOICE_ID` for video avatars) from your LiveAvatar account. Create a reusable context with an encouraging English-coach prompt and opening greeting, then use its context ID. The API key stays server-side; only a short-lived session token is issued to the browser. Learners must be signed in before an animated-avatar session token can be issued; guest users can still use voice practice.
+9. For a streamed AI teacher during video calls, optionally configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` (plus optional `LIVEAVATAR_VOICE_ID`) from your LiveAvatar account. Without those credentials, `/live-call` uses Courant's local animated avatar while Gemini Live still handles the conversation and optional camera context. The provider API key stays server-side; only a short-lived session token is issued to signed-in learners.
 10. Run `npm run dev` and open `http://localhost:3000`.
 
 ## Main experiences
@@ -21,13 +21,13 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 - `/local-tutor` — optional on-device text tutor with browser speech input/output and a lightweight animated teacher; requires WebGPU and a first-use model download
 - `/offline-practice` — individual English lessons with browser-local drafts, progress, and exportable backups
 - `/offline-classroom` — manual file-based assignment distribution and submission collection without accounts or a database
-- `/live-call` — real-time English voice practice and, when LiveAvatar is configured, an animated streaming AI teacher with live spoken responses, camera preview, beginner/intermediate/advanced coaching, and optional post-call feedback
+- `/live-call` — real-time English voice/video practice with a local animated teacher fallback; optionally upgrades to a streamed LiveAvatar when provider credentials are configured, with live spoken responses, camera context, level-aware coaching, and post-call feedback
 - `/practice-plan` — configurable practice plan
 - `/signup` and `/login` — account creation and sign-in
 - `/dashboard` — learner progress, class membership, assignments, and saved sessions
 - `/teacher` — teacher-only class and assignment management
 - `/creator` — private learner portfolio editor
-- `/forgot-password` and `/reset-password` — one-time password recovery (requires Resend configuration)
+- `/forgot-password` and `/reset-password` — Supabase Auth password recovery (requires production SMTP configured in Supabase Auth)
 - `/settings` — personal data export and account deletion
 - `/teacher/review` — teacher feedback and optional scoring for submitted work
 - `POST /api/tutor` — conversational tutoring with optional image input and recent saved learning context
