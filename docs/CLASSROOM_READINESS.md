@@ -79,23 +79,59 @@ These fallbacks do not depend on the broken database connection or hosted AI pro
 
 ## Required environment configuration
 
-- `MONGODB_URI`, `MONGODB_DB`
-- `AUTH_SECRET` (random, at least 32 characters)
-- `OPENAI_API_KEY` and optionally `OPENAI_MODEL`, `OPENAI_TTS_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`
-- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL` for password recovery email
-- `COURANT_TEACHER_INVITE_CODE` if teacher invitation gating is enabled
+Required server/deployment variables:
 
-Never commit these values or expose them through `NEXT_PUBLIC_*`. Configure them in the deployment provider's secret manager. The automated suite intentionally runs without production credentials; its expected 503/401 responses are checks of safe failure behavior, not proof that live integrations work.
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `COURANT_RATE_LIMIT_SECRET` — exactly 64 characters; server-only, never prefix with `NEXT_PUBLIC_`
+- `GEMINI_API_KEY` — server-only key for Gemini Live, tutoring, speech and transcription
 
+Optional model selection:
+
+- `GEMINI_LIVE_MODEL`
+- `GEMINI_TEXT_MODEL`
+- `GEMINI_TTS_MODEL`
+- `GEMINI_TRANSCRIPTION_MODEL`
+
+Optional streamed-avatar integration:
+
+- `LIVEAVATAR_API_KEY`
+- `LIVEAVATAR_AVATAR_ID`
+- `LIVEAVATAR_CONTEXT_ID`
+- `LIVEAVATAR_VOICE_ID`
+
+Password recovery email is sent by Supabase Auth; configure a production SMTP provider and approved sender in the Supabase Auth settings. Teacher invitations are stored as hashes in `public.teacher_invites`; no plaintext invitation code belongs in an environment variable or Git.
+
+### Rate-limit secret setup for a new environment
+
+1. Generate a fresh 32-byte random value in a secure terminal, for example with `openssl rand -hex 32`.
+2. Set that exact value as `COURANT_RATE_LIMIT_SECRET` in the server's secret manager.
+3. In the target Supabase project's SQL editor, store only its SHA-256 hash:
+
+```sql
+insert into public.api_internal_secrets(name, secret_hash)
+values ('rate_limit_rpc', encode(extensions.digest('<PASTE_SECRET_HERE>', 'sha256'), 'hex'))
+on conflict (name) do update set secret_hash = excluded.secret_hash;
+```
+
+4. Confirm `GET /api/health` returns HTTP 200 and reports `rateLimitRpc: "ok"`. Never commit the generated value or paste it into a client-side variable.
+
+The current application no longer requires `MONGODB_URI`, `MONGODB_DB`, `AUTH_SECRET`, `OPENAI_API_KEY`, or Resend credentials. Keep old secrets only during a deliberate rollback window, then rotate/remove them. Legacy MongoDB account/data migration remains a separate task if an export is available. The automated suite uses isolated placeholder credentials; its expected 503/401 responses verify safe failure behavior, not live provider availability.
 
 ## Live AI teacher capability boundary
 
-The live coach supports real-time spoken conversation through WebRTC, learner-level adaptation, live transcription in the page, and an optional post-call learning recap. When LiveAvatar is configured, video mode renders a continuously animated AI teacher with synchronized speech. The learner camera remains a separate optional preview; compressed still frames may also be sent roughly every six seconds to the OpenAI coach for visual context. Without LiveAvatar credentials, animated teacher video is unavailable. Camera permission is requested by the browser and can be paused independently during the call. The recap is generated only when the learner asks for it and remains in the page; the live transcript is not automatically persisted.
+The hosted call uses Gemini Live over a WebSocket for low-latency spoken conversation, learner-level adaptation, live transcription, and an optional post-call recap. In video mode, the learner can enable the camera; the browser sends compressed JPEG still frames (480 pixels wide, approximately every 1.1 seconds) to Gemini as visual context. This is periodic image sharing, not a continuous video stream, and the camera can be paused independently.
+
+The teacher display uses a local animated SVG avatar by default. Its simple mouth animation follows generated response transcription; it is not a photorealistic avatar or precise audio lip-sync. If LiveAvatar credentials and an eligible account are configured, the room can upgrade to a streamed avatar. If that provider is missing or unavailable, the local avatar and Gemini voice call continue. The separate `/local-tutor` runs a small WebLLM model on compatible WebGPU devices; its camera is a private self-preview and is not analysed by that local model. Browser speech recognition may use its own online service, while spoken replies use installed system voices.
+
+The app does not automatically persist live transcripts or raw audio recordings. A recap is generated only when requested and remains on the page unless the learner explicitly saves related progress.
 
 ### Required release verification
 
-- [ ] Configure a server-side `GEMINI_API_KEY` with Gemini Live access and verify `/api/tutor/realtime-session` returns a short-lived client secret.
-- [ ] Configure MongoDB Atlas, `AUTH_SECRET`, and production HTTPS.
+- [ ] Replay all 16 migrations in a clean staging Supabase project and configure a fresh RPC secret as described above.
+- [ ] Configure `GEMINI_API_KEY`; verify `/api/health`, a live voice session, text tutoring, TTS, and transcription using non-sensitive test accounts.
+- [ ] Configure Supabase Auth SMTP, site URL, and redirect URLs; test confirmation and password recovery email delivery.
+- [ ] Create a teacher invitation through a secure admin process; verify teacher signup, student signup, class creation, class joining, assignments, submission and review.
 - [ ] Test voice call, mute, interruption, end-call cleanup, camera pause/resume, and recap generation on physical iPadOS/Safari and desktop browsers.
-- [ ] Confirm that provider usage limits, cost alerts, and data-processing/privacy notices are appropriate for the intended school and age group.
-- [ ] Configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` (and `LIVEAVATAR_VOICE_ID` when required by the selected avatar) to enable the integrated LiveAvatar video path. The OpenAI Realtime model still handles English conversation; the avatar renders its spoken response as a synchronized animated video. Verify the provider account has Streaming Avatar access, avatar ID permission, usage budget, and required consent/privacy terms.
+- [ ] If streamed avatar video is required, configure LiveAvatar credentials and verify provider access, avatar permissions, usage budget, consent and privacy terms. Otherwise the local animated avatar is the supported fallback.
+- [ ] Confirm provider usage limits, cost alerts, data-processing/privacy notices, age-appropriate consent and school/guardian review before enrolling real students.
