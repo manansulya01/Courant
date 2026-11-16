@@ -1,68 +1,41 @@
-import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
 import { cookies } from "next/headers";
-import { ObjectId } from "mongodb";
-import { getDatabase } from "@/lib/mongodb";
+import { createServerClient } from "@supabase/ssr";
 
-const scrypt = promisify(scryptCallback);
-const COOKIE = "courant_session";
-const SESSION_SECONDS = 60 * 60 * 24 * 7;
 export type Role = "student" | "teacher" | "parent" | "admin";
 export type SafeUser = { id: string; name: string; email: string; role: Role };
 
-function secret() {
-  const value = process.env.AUTH_SECRET;
-  if (!value || value.length < 32) throw new Error("AUTH_SECRET must be set to a random string of at least 32 characters.");
-  return value;
+export async function createSupabaseServerClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw new Error("Supabase is not configured.");
+  const cookieStore = await cookies();
+  return createServerClient(url, key, {
+    cookies: {
+      getAll() { return cookieStore.getAll(); },
+      setAll(values) {
+        try { values.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); }
+        catch { /* Server Components cannot mutate cookies; API routes can. */ }
+      },
+    },
+  });
 }
-function sign(value: string) { return createHmac("sha256", secret()).update(value).digest("base64url"); }
-function equal(a: string, b: string) {
-  const aa = Buffer.from(a); const bb = Buffer.from(b);
-  return aa.length === bb.length && timingSafeEqual(aa, bb);
-}
-export async function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const derived = await scrypt(password, salt, 64) as Buffer;
-  return `scrypt:${salt}:${derived.toString("hex")}`;
-}
-export async function verifyPassword(password: string, stored: string) {
-  const [scheme, salt, digest] = stored.split(":");
-  if (scheme !== "scrypt" || !salt || !digest) return false;
-  const actual = await scrypt(password, salt, 64) as Buffer;
-  return equal(actual.toString("hex"), digest);
-}
-export async function setSession(user: SafeUser) {
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const payload = Buffer.from(JSON.stringify({ sub: user.id, role: user.role, iat: issuedAt, exp: issuedAt + SESSION_SECONDS })).toString("base64url");
-  const value = payload + "." + sign(payload);
-  const jar = await cookies();
-  jar.set(COOKIE, value, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: SESSION_SECONDS });
-}
-export async function clearSession() {
-  const jar = await cookies();
-  jar.set(COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
-}
+
 export async function getCurrentUser(): Promise<SafeUser | null> {
   try {
-    const jar = await cookies();
-    const value = jar.get(COOKIE)?.value;
-    if (!value) return null;
-    const [payload, signature, extra] = value.split(".");
-    if (!payload || !signature || extra || !equal(sign(payload), signature)) return null;
-    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {sub:string; role:Role; iat?:number; exp:number};
-    if (!session.sub || !ObjectId.isValid(session.sub) || session.exp < Math.floor(Date.now()/1000)) return null;
-    const db = await getDatabase();
-    const user = await db.collection("users").findOne({ _id: new ObjectId(session.sub), status: "active" });
-    if (!user || !["student","teacher","parent","admin"].includes(user.role)) return null;
-    // Password resets revoke previously issued sessions. Older cookies without `iat`
-    // are rejected once a password-change timestamp exists on the account.
-    if (user.passwordChangedAt instanceof Date && (typeof session.iat !== "number" || !Number.isFinite(session.iat) || session.iat < Math.floor(user.passwordChangedAt.getTime() / 1000))) return null;
-    return { id: user._id.toString(), name: user.name, email: user.email, role: user.role };
+    const supabase = await createSupabaseServerClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return null;
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles").select("id,name,email,role,status").eq("id", user.id).maybeSingle();
+    if (profileError || !profile || profile.status !== "active" ||
+      !["student", "teacher", "parent", "admin"].includes(profile.role)) return null;
+    return { id: profile.id, name: profile.name || "", email: profile.email || user.email || "", role: profile.role as Role };
   } catch { return null; }
 }
-export function safeUser(user: { _id: ObjectId; name: string; email: string; role: Role }): SafeUser {
-  return { id: user._id.toString(), name: user.name, email: user.email, role: user.role };
+
+export async function clearSession() {
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut();
 }
-export function isSafeId(value: unknown): value is string {
-  return typeof value === "string" && ObjectId.isValid(value);
-}
+
+export async function safeUser(user: SafeUser): Promise<SafeUser> { return user; }
