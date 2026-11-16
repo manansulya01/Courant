@@ -33,11 +33,5 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Security and input tests
-        run: npm run test:security
-
-      - name: Production build
+      - name: Lint, security tests, and production build
         run: npm run build
