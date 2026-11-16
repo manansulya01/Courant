@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/security";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export async function GET() {
+export async function GET(request: Request) {
   const started = Date.now();
   let database: "ok" | "unavailable" = "unavailable";
   try {
@@ -13,11 +14,20 @@ export async function GET() {
   } catch (error) { console.error("Courant health check: Supabase unavailable", error instanceof Error ? error.name : "UnknownError"); }
   const authConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
   const rateLimitConfigured = Boolean(process.env.COURANT_RATE_LIMIT_SECRET);
+  let rateLimitRpc: "ok" | "unavailable" = "unavailable";
+  try {
+    // Use a fixed server-only identity so health probes do not consume a
+    // learner's tutor quota while still verifying the secret and RPC end-to-end.
+    await checkRateLimit(new Request(request.url), "health", 1_000_000, 60);
+    rateLimitRpc = "ok";
+  } catch (error) {
+    console.error("Courant health check: rate-limit RPC unavailable", error instanceof Error ? error.name : "UnknownError");
+  }
   const aiConfigured = Boolean(process.env.GEMINI_API_KEY);
-  const ready = database === "ok" && authConfigured && rateLimitConfigured && aiConfigured;
+  const ready = database === "ok" && authConfigured && rateLimitConfigured && rateLimitRpc === "ok" && aiConfigured;
   return NextResponse.json({
     status: ready ? "ok" : "degraded",
-    checks: { database, authConfigured, rateLimitConfigured, aiConfigured },
+    checks: { database, authConfigured, rateLimitConfigured, rateLimitRpc, aiConfigured },
     latencyMs: Date.now() - started,
     timestamp: new Date().toISOString(),
   }, { status: ready ? 200 : 503, headers: { "Cache-Control": "no-store" } });
