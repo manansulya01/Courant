@@ -26,6 +26,7 @@ export async function checkRateLimit(
     p_key: `${scope}:${key}`,
     p_limit: limit,
     p_window_seconds: windowSeconds,
+    p_secret: process.env.COURANT_RATE_LIMIT_SECRET,
   });
   if (error || !data?.[0]) {
     console.error("Shared rate-limit store unavailable.", error?.code || "unknown");
