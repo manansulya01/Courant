@@ -66,14 +66,18 @@ export async function POST(request: Request) {
     const now = Date.now();
     const model = process.env.GEMINI_LIVE_MODEL || "gemini-3.1-flash-live-preview";
     const liveConfig = {
-      responseModalities: ["AUDIO"],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        temperature: 0.65,
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } },
+      },
       systemInstruction: { parts: [{ text: instructions }] },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
-      generationConfig: { temperature: 0.65, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
+      sessionResumption: {},
     };
-    const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/auth_tokens", {
+    const upstream = await fetch("https://generativelanguage.googleapis.com/v1alpha/auth_tokens", {
       method: "POST",
       headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
       cache: "no-store",
@@ -84,7 +88,7 @@ export async function POST(request: Request) {
           expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
           newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
           liveConnectConstraints: {
-            model: `models/${model}`,
+            model,
             config: liveConfig,
           },
         },
