@@ -26,7 +26,7 @@ export async function GET() {
     const { data: memberships, error: memberError } = ids.length ? await s.from("class_members").select("class_id,student_id,joined_at").in("class_id", ids).limit(2000) : { data: [], error: null };
     if (memberError) throw memberError;
     return NextResponse.json({
-      classes: (classes || []).map(c => ({ id:c.id, name:c.name, description:c.description, joinCode:c.join_code, studentCount:Array.isArray(c.class_members)?c.class_members[0]?.count||0:0, createdAt:c.created_at })),
+      classes: (classes || []).map(c => ({ id:c.id, name:c.name, description:c.description, joinCode:c.join_code, studentIds:(memberships || []).filter(m => m.class_id === c.id).map(m => m.student_id), studentCount:Array.isArray(c.class_members)?c.class_members[0]?.count||0:0, createdAt:c.created_at })),
       assignments: (assignments || []).map(a => ({ id:a.id, classId:a.class_id, teacherId:a.teacher_id, title:a.title, instructions:a.instructions, dueDate:a.due_at, createdAt:a.created_at })),
       activity: (memberships || []).map(m => ({ userId:m.student_id, classId:m.class_id, joinedAt:m.joined_at, sessions:0, minutes:0 }))
     }, { headers: { "Cache-Control": "no-store" } });
