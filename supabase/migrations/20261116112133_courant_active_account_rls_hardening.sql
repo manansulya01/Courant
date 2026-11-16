@@ -1,3 +1,4 @@
+
 create or replace function public.is_teacher_of_class(p_class_id uuid)
 returns boolean
 language sql
