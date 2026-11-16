@@ -17,6 +17,6 @@ export async function GET() {
     else return NextResponse.json({ error: "Your account cannot view class assignments." }, { status: 403 });
     const { data, error } = await query;
     if (error) throw error;
-    return NextResponse.json({ assignments: data || [] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ assignments: (data || []).map(a => ({ id:a.id, classId:a.class_id, teacherId:a.teacher_id, title:a.title, description:a.description, instructions:a.instructions, dueDate:a.due_at, createdAt:a.created_at, updatedAt:a.updated_at })) }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Could not load assignments." }, { status: 503 }); }
 }
