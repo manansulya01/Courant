@@ -11,16 +11,17 @@ This checklist separates repository checks from launch tasks that require real c
 - [x] Node test suite covers valid objects, malformed JSON, non-object JSON, declared-size rejection, and streamed oversized bodies.
 - [x] Teacher write/delete handlers apply rate limits before bounded streaming JSON parsing; classroom cascades use PostgreSQL foreign-key cascades and row-level security.
 - [ ] Commit a lockfile and move CI to `npm ci` after dependency versions are intentionally pinned.
-- [ ] Add unit/integration tests with a disposable replica-set MongoDB instance and mocked provider responses; verify transaction rollback and tenant isolation.
+- [ ] Add unit/integration tests against a disposable Supabase staging project with mocked provider responses; verify tenant isolation, class-join rules, submission integrity, and account deletion.
 
 ### 2. Authentication, authorization and tenant isolation
 - [x] Supabase Auth replaces custom MongoDB password hashes and signed session cookies.
 - [x] Profiles, classes, memberships, assignments, submissions, progress, portfolio, and rate limits use PostgreSQL with row-level security.
 - [x] Student self-registration cannot assign teacher/admin roles; one-time invitation hashes are redeemed inside the Auth user-creation trigger.
-- [x] Shared rate limiting uses a restricted PostgreSQL function with a fixed allowlist of endpoint scopes and thresholds.
+- [x] Shared rate limiting uses a PostgreSQL function with fixed endpoint scopes/thresholds and a server-only credential whose hash is checked in the database.
 - [ ] Configure Supabase Auth redirect URLs and production SMTP; test signup confirmation and password recovery end-to-end.
 - [ ] Run multi-account tests proving students and teachers cannot access another user's portfolio, class, submissions or progress by changing IDs.
 - [ ] Import legacy MongoDB accounts and records if the old database becomes available; existing MongoDB credentials are not migrated automatically.
+- [ ] Reconstruct and check in the complete ordered Supabase bootstrap migration history; the repository currently contains only the latest RLS hardening migration, so a clean database cannot yet be recreated from Git alone.
 
 ### 3. AI conversation and speech reliability
 - [x] English conversation page supports push-to-talk, transcription, spoken replies, replay and text/browser speech fallback.
@@ -31,14 +32,15 @@ This checklist separates repository checks from launch tasks that require real c
 ### 4. Database resilience and privacy
 - [x] Courant production uses Supabase PostgreSQL 17 in the Mumbai region; RLS is enabled on every application table.
 - [x] Account deletion removes the Supabase Auth user and cascades related profile, class, submission, progress and portfolio records.
-- [x] Supabase security and performance advisors were run; the remaining anonymous SECURITY DEFINER rate-limit function is intentionally exposed for unauthenticated API throttling and accepts only fixed endpoint scopes/limits.
+- [x] Supabase security and performance advisors were run. The rate-limit SECURITY DEFINER RPC remains callable by `anon` because unauthenticated routes need throttling, but rejects calls without the server-only credential, validates fixed scopes/limits, and fails closed.
 - [ ] Configure and test database backups, monitoring, restore procedures, and production SMTP.
 - [ ] Import legacy MongoDB records if a verified export becomes available.
 - [ ] Verify transcripts/raw recordings are not retained unless explicitly designed, consented to and documented.
 
 ### 5. Web/API security and operational controls
 - [x] Baseline response headers include frame denial, MIME sniffing protection, referrer policy and restrictive camera/microphone/geolocation permissions; HSTS is production-only.
-- [x] High-cost tutoring and coaching endpoints use same-origin checks and rate limiting.
+- [x] High-cost tutoring and coaching endpoints use same-origin checks and shared rate limiting.
+- [x] Live video practice falls back to a local animated avatar when streamed-avatar credentials or service are unavailable; the learner camera and Gemini Live voice path remain separate.
 - [ ] Verify HTTPS, deployment proxy/body limits, CSP compatibility, secret rotation, alerting and privacy-preserving logs in the real host environment.
 - [ ] Run a security review and dependency audit against the exact release commit before launch.
 
