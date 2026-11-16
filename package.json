@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run lint && npm run test:security && next build",
     "start": "next start",
     "lint": "eslint .",
     "test:security": "node --experimental-strip-types --test scripts/bounded-json.test.mjs scripts/class-code.test.mjs scripts/rate-limit-key.test.mjs"
