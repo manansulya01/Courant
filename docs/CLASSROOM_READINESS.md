@@ -18,10 +18,11 @@ This checklist separates repository checks from launch tasks that require real c
 - [x] Profiles, classes, memberships, assignments, submissions, progress, portfolio, and rate limits use PostgreSQL with row-level security.
 - [x] Student self-registration cannot assign teacher/admin roles; one-time invitation hashes are redeemed inside the Auth user-creation trigger.
 - [x] Shared rate limiting uses a PostgreSQL function with fixed endpoint scopes/thresholds and a server-only credential whose hash is checked in the database.
+- [x] The class-join SECURITY DEFINER RPC also requires that server-only credential, preventing authenticated clients from bypassing the API's per-IP join limit through direct RPC calls.
 - [ ] Configure Supabase Auth redirect URLs and production SMTP; test signup confirmation and password recovery end-to-end.
 - [ ] Run multi-account tests proving students and teachers cannot access another user's portfolio, class, submissions or progress by changing IDs.
 - [ ] Import legacy MongoDB accounts and records if the old database becomes available; existing MongoDB credentials are not migrated automatically.
-- [ ] Reconstruct and check in the complete ordered Supabase bootstrap migration history; the repository currently contains only the latest RLS hardening migration, so a clean database cannot yet be recreated from Git alone.
+- [ ] Reconstruct and check in the complete ordered Supabase bootstrap migration history; the repository currently contains only two recent security hardening migrations, so a clean database cannot yet be recreated from Git alone.
 
 ### 3. AI conversation and speech reliability
 - [x] English conversation page supports push-to-talk, transcription, spoken replies, replay and text/browser speech fallback.
