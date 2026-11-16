@@ -20,7 +20,7 @@ export async function GET() {
     } else return NextResponse.json({ error: "Teacher permissions are required." }, { status: 403 });
     const { data, error } = await query;
     if (error) throw error;
-    return NextResponse.json({ submissions: data || [] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ submissions: (data || []).map(x => ({ id:x.id, assignmentId:x.assignment_id, userId:x.user_id, studentName:x.student_name, content:x.content, status:x.status, feedback:x.feedback, score:x.score, submittedAt:x.submitted_at, reviewedAt:x.reviewed_at, updatedAt:x.updated_at })) }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Could not load submissions." }, { status: 503 }); }
 }
 export async function POST(request: Request) {
