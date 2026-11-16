@@ -18,13 +18,21 @@ export async function POST(request: Request) {
   if (name.length < 2) return NextResponse.json({ error: "Enter a name between 2 and 80 characters." }, { status: 400 });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   if (password.length < 10 || password.length > 128) return NextResponse.json({ error: "Use a password between 10 and 128 characters." }, { status: 400 });
-  if (parsed.value.role === "teacher") return NextResponse.json({ error: "Teacher accounts must be provisioned by a Courant administrator. Student registration cannot grant teacher privileges." }, { status: 403 });
-  if (parsed.value.role && parsed.value.role !== "student") return NextResponse.json({ error: "Choose a supported account type." }, { status: 400 });
+  const requestedRole = parsed.value.role === "teacher" ? "teacher" : "student";
+  if (parsed.value.role && !["student", "teacher"].includes(String(parsed.value.role))) return NextResponse.json({ error: "Choose a supported account type." }, { status: 400 });
+  const inviteCode = typeof parsed.value.inviteCode === "string" ? parsed.value.inviteCode.trim() : "";
+  if (requestedRole === "teacher" && (!inviteCode || inviteCode.length > 100)) return NextResponse.json({ error: "A valid school-issued teacher invitation is required." }, { status: 403 });
   try {
     const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+    if (requestedRole === "teacher") {
+      const { data: validInvite, error: inviteError } = await supabase.rpc("check_teacher_invite", { p_code: inviteCode });
+      if (inviteError || validInvite !== true) return NextResponse.json({ error: "That teacher invitation is invalid, expired, or already used." }, { status: 403 });
+    }
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, ...(requestedRole === "teacher" ? { teacher_invite_code: inviteCode } : {}) } } });
     if (error) return NextResponse.json({ error: error.message.includes("already registered") ? "An account with that email already exists." : "Could not create your account. Check your details and try again." }, { status: error.message.includes("already registered") ? 409 : 400 });
     if (!data.user) return NextResponse.json({ error: "Account creation could not be confirmed. Please try again." }, { status: 503 });
-    return NextResponse.json({ user: { id: data.user.id, name, email, role: "student" }, requiresEmailConfirmation: !data.session, message: data.session ? "Your account is ready." : "Check your email to confirm your account before signing in." }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
+    const role = profile?.role === "teacher" ? "teacher" : requestedRole === "teacher" ? "teacher" : "student";
+    return NextResponse.json({ user: { id: data.user.id, name, email, role }, requiresEmailConfirmation: !data.session, message: data.session ? "Your account is ready." : "Check your email to confirm your account before signing in." }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Account creation is temporarily unavailable." }, { status: 503 }); }
 }
