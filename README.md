@@ -10,9 +10,9 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 4. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the Supabase project. Set `COURANT_RATE_LIMIT_SECRET` from the server-only Vercel environment configuration; never expose it to the browser. The Courant production project is hosted in Mumbai; its schema, RLS policies, Auth trigger, and rate-limit functions are provisioned in Supabase.
 5. Student accounts use Supabase Auth email confirmation. Teacher accounts require a one-time school invitation code. Never expose database secret/service-role keys in the browser.
 6. Add a Gemini API key to `GEMINI_API_KEY` for the migrated text/image tutor and Gemini Live calls. Keep it server-side; never prefix it with `NEXT_PUBLIC_`. The default models are configured by `GEMINI_TEXT_MODEL` and `GEMINI_LIVE_MODEL`.
-8. Speech generation and recorded-audio transcription also use Gemini. Configure `GEMINI_TTS_MODEL` (default `gemini-2.5-flash-preview-tts`) and `GEMINI_TRANSCRIPTION_MODEL` (default `gemini-2.5-flash`) if you need to override the defaults. All AI provider keys remain server-side.
-9. For a streamed AI teacher during video calls, optionally configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` (plus optional `LIVEAVATAR_VOICE_ID`) from your LiveAvatar account. Without those credentials, `/live-call` uses Courant's local animated avatar while Gemini Live still handles the conversation and optional camera context. The provider API key stays server-side; only a short-lived session token is issued to signed-in learners.
-10. Run `npm run dev` and open `http://localhost:3000`.
+7. Speech generation and recorded-audio transcription also use Gemini. Configure `GEMINI_TTS_MODEL` (default `gemini-2.5-flash-preview-tts`) and `GEMINI_TRANSCRIPTION_MODEL` (default `gemini-2.5-flash`) if you need to override the defaults. All AI provider keys remain server-side.
+8. For a streamed AI teacher during video calls, optionally configure `LIVEAVATAR_API_KEY`, `LIVEAVATAR_AVATAR_ID`, and `LIVEAVATAR_CONTEXT_ID` (plus optional `LIVEAVATAR_VOICE_ID`) from your LiveAvatar account. Without those credentials, `/live-call` uses Courant's local animated avatar while Gemini Live still handles the conversation and optional camera context. The provider API key stays server-side; only a short-lived session token is issued to signed-in learners.
+9. Run `npm run dev` and open `http://localhost:3000`.
 
 ## Main experiences
 
