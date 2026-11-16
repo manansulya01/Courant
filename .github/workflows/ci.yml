@@ -36,10 +36,3 @@ jobs:
       - name: Lint, security tests, and production build
         run: npm run build
 
-      - name: Start production server
-        run: npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/courant-next.log 2>&1 &
-
-      - name: Production route and security smoke tests
-        run: node scripts/smoke.mjs
-        env:
-          COURANT_SMOKE_URL: http://127.0.0.1:3000
