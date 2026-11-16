@@ -9,15 +9,18 @@ This checklist separates repository checks from launch tasks that require real c
 - [x] Smoke checks cover key public routes, security headers, expected auth boundaries, unavailable-provider responses, malformed/oversized coaching requests, and oversized streamed bodies without `Content-Length`.
 - [x] Learner JSON APIs use a shared streaming byte limit instead of trusting `Content-Length` or buffering unbounded request bodies.
 - [x] Node test suite covers valid objects, malformed JSON, non-object JSON, declared-size rejection, and streamed oversized bodies.
-- [x] Teacher write/delete handlers apply rate limits before bounded streaming JSON parsing; classroom cascades run in a MongoDB transaction.
+- [x] Teacher write/delete handlers apply rate limits before bounded streaming JSON parsing; classroom cascades use PostgreSQL foreign-key cascades and row-level security.
 - [ ] Commit a lockfile and move CI to `npm ci` after dependency versions are intentionally pinned.
 - [ ] Add unit/integration tests with a disposable replica-set MongoDB instance and mocked provider responses; verify transaction rollback and tenant isolation.
 
 ### 2. Authentication, authorization and tenant isolation
-- [x] Protected API routes return unauthenticated responses in production smoke tests.
-- [ ] Configure a production-strength `AUTH_SECRET`; verify session expiry, rotation, secure cookie flags and password recovery email.
+- [x] Supabase Auth replaces custom MongoDB password hashes and signed session cookies.
+- [x] Profiles, classes, memberships, assignments, submissions, progress, portfolio, and rate limits use PostgreSQL with row-level security.
+- [x] Student self-registration cannot assign teacher/admin roles; one-time invitation hashes are redeemed inside the Auth user-creation trigger.
+- [x] Shared rate limiting uses a restricted PostgreSQL function with a fixed allowlist of endpoint scopes and thresholds.
+- [ ] Configure Supabase Auth redirect URLs and production SMTP; test signup confirmation and password recovery end-to-end.
 - [ ] Run multi-account tests proving students and teachers cannot access another user's portfolio, class, submissions or progress by changing IDs.
-- [ ] Confirm teacher registration/invitation flow with school administrators.
+- [ ] Import legacy MongoDB accounts and records if the old database becomes available; existing MongoDB credentials are not migrated automatically.
 
 ### 3. AI conversation and speech reliability
 - [x] English conversation page supports push-to-talk, transcription, spoken replies, replay and text/browser speech fallback.
@@ -26,9 +29,11 @@ This checklist separates repository checks from launch tasks that require real c
 - [ ] Verify voice quality, latency, pronunciation-feedback claims and speech support on actual target iPads.
 
 ### 4. Database resilience and privacy
-- [x] MongoDB client pool and server selection timeout are configured; health endpoint reports database/auth readiness without exposing credentials.
-- [ ] Use a least-privilege database user, TLS, IP/network restrictions, backups, monitoring and a documented tested restore procedure.
-- [ ] Confirm indexes, migrations, retention/TTL policies and account deletion across all related collections.
+- [x] Courant production uses Supabase PostgreSQL 17 in the Mumbai region; RLS is enabled on every application table.
+- [x] Account deletion removes the Supabase Auth user and cascades related profile, class, submission, progress and portfolio records.
+- [x] Supabase security and performance advisors were run; the remaining anonymous SECURITY DEFINER rate-limit function is intentionally exposed for unauthenticated API throttling and accepts only fixed endpoint scopes/limits.
+- [ ] Configure and test database backups, monitoring, restore procedures, and production SMTP.
+- [ ] Import legacy MongoDB records if a verified export becomes available.
 - [ ] Verify transcripts/raw recordings are not retained unless explicitly designed, consented to and documented.
 
 ### 5. Web/API security and operational controls
