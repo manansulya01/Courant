@@ -79,12 +79,14 @@ export async function POST(request: Request) {
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
-        uses: 1,
-        expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
-        newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
-        liveConnectConstraints: {
-          model: `models/${model}`,
-          config: liveConfig,
+        authToken: {
+          uses: 1,
+          expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
+          newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
+          liveConnectConstraints: {
+            model: `models/${model}`,
+            config: liveConfig,
+          },
         },
       }),
     });
