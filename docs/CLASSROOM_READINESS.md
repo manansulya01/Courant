@@ -5,9 +5,9 @@ This checklist separates repository checks from launch tasks that require real c
 ## Eight workstreams
 
 ### 1. Build, lint, dependency and route checks
-- [x] GitHub Actions runs ESLint, the security/input unit tests, and a production Next.js build on pushes to `main` and pull requests.
+- [x] The existing GitHub `build-check` workflow blocks on high-severity production dependency advisories, reports development advisories non-blocking, and runs ESLint, security/input tests, a production Next.js build, and production route/security smoke tests on pushes and pull requests.
 - [x] GitHub Actions starts the built production server and smoke-tests public routes, security headers, PWA assets, unauthenticated API boundaries, malformed/oversized requests, and fail-closed provider/rate-limit responses.
-- [ ] Add a production dependency audit and pin dependencies with a committed lockfile.
+- [ ] Pin dependency versions and commit a package lockfile so local, CI, and Vercel installs are reproducible; the full development-dependency audit remains report-only.
 - [x] Learner JSON APIs use a shared streaming byte limit instead of trusting `Content-Length` or buffering unbounded request bodies.
 - [x] Node test suite covers valid objects, malformed JSON, non-object JSON, declared-size rejection, and streamed oversized bodies.
 - [x] Teacher write/delete handlers apply rate limits before bounded streaming JSON parsing; classroom cascades use PostgreSQL foreign-key cascades and row-level security.
