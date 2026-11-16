@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { createSupabaseServerClient } from "@/lib/auth";
+import { createRateLimitKey } from "@/lib/rate-limit-key";
 
 export function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
@@ -19,11 +19,10 @@ export async function checkRateLimit(
   const forwarded = request.headers.get("x-forwarded-for");
   const address = request.headers.get("x-real-ip")?.trim() ||
     forwarded?.split(",").map(part => part.trim()).filter(Boolean).at(-1) || "unknown";
-  const identity = createHash("sha256").update(address).digest("hex").slice(0, 32);
-  const key = createHash("sha256").update(`${scope}:${identity}`).digest("hex");
+  const key = createRateLimitKey(scope, address);
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("consume_rate_limit", {
-    p_key: `${scope}:${key}`,
+    p_key: key,
     p_limit: limit,
     p_window_seconds: windowSeconds,
     p_secret: process.env.COURANT_RATE_LIMIT_SECRET,
