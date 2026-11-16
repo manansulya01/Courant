@@ -10,7 +10,6 @@
     "test:security": "node --experimental-strip-types --test scripts/bounded-json.test.mjs scripts/class-code.test.mjs"
   },
   "dependencies": {
-    "mongodb": "^6.18.0",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
