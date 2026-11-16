@@ -29,6 +29,8 @@ export default function LiveCallPage() {
   const [recap, setRecap] = useState("");
   const [recapBusy, setRecapBusy] = useState(false);
   const [avatarReady, setAvatarReady] = useState(false);
+  const [localAvatarActive, setLocalAvatarActive] = useState(false);
+  const [avatarSpeaking, setAvatarSpeaking] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const playbackTimeRef = useRef(0);
@@ -59,6 +61,8 @@ export default function LiveCallPage() {
     if (avatar?.stop) void avatar.stop().catch(() => undefined);
     avatarRef.current = null;
     setAvatarReady(false);
+    setLocalAvatarActive(false);
+    setAvatarSpeaking(false);
     if (avatarVideoRef.current) avatarVideoRef.current.srcObject = null;
     processorRef.current?.disconnect();
     processorRef.current = null;
@@ -114,6 +118,8 @@ export default function LiveCallPage() {
     setLines([]);
     setRecap("");
     setAvatarReady(false);
+    setLocalAvatarActive(mode === "video");
+    setAvatarSpeaking(false);
     lastAvatarTextRef.current = "";
     setStatus("connecting");
     statusRef.current = "connecting";
@@ -146,29 +152,44 @@ export default function LiveCallPage() {
       if (typeof sessionData.clientSecret !== "string") throw new Error("The live session was not configured correctly.");
 
       if (mode === "video") {
-        const avatarTokenResponse = await fetch("/api/tutor/avatar-token", { method: "POST" });
-        const avatarTokenData = await avatarTokenResponse.json();
-        if (!avatarTokenResponse.ok) throw new Error(avatarTokenData.error || "Animated teacher video is not configured.");
-        const { LiveAvatarSession, SessionEvent } = await import("@heygen/liveavatar-web-sdk");
-        const avatar = new LiveAvatarSession(avatarTokenData.sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
-        avatarRef.current = avatar;
-        avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
-          if (avatarVideoRef.current) {
-            avatar.attach(avatarVideoRef.current);
-            setAvatarReady(true);
-          }
-        });
-        avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
-          if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "INACTIVE") {
+        // Streamed avatar video is an enhancement, not a hard dependency. If
+        // LiveAvatar is unconfigured, unavailable, or requires sign-in, keep
+        // the Gemini call alive and show the local animated teacher instead.
+        try {
+          const avatarTokenResponse = await fetch("/api/tutor/avatar-token", { method: "POST" });
+          const avatarTokenData = await avatarTokenResponse.json();
+          if (!avatarTokenResponse.ok) throw new Error(avatarTokenData.error || "Animated teacher video is unavailable.");
+          const { LiveAvatarSession, SessionEvent } = await import("@heygen/liveavatar-web-sdk");
+          const avatar = new LiveAvatarSession(avatarTokenData.sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
+          avatarRef.current = avatar;
+          avatar.on(SessionEvent.SESSION_STREAM_READY, () => {
+            if (avatarVideoRef.current) {
+              avatar.attach(avatarVideoRef.current);
+              setAvatarReady(true);
+              setLocalAvatarActive(false);
+            }
+          });
+          avatar.on(SessionEvent.SESSION_STATE_CHANGED, (state: string) => {
+            if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "INACTIVE") {
+              setAvatarReady(false);
+              setLocalAvatarActive(true);
+              if (statusRef.current === "connected") setStatusText("The streamed avatar disconnected. Your local teacher is still here; the voice call continues.");
+            }
+          });
+          avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
             setAvatarReady(false);
-            if (statusRef.current === "connected") setStatusText("The animated teacher disconnected. End the call and reconnect.");
-          }
-        });
-        avatar.on(SessionEvent.SESSION_DISCONNECTED, () => {
+            setLocalAvatarActive(true);
+            if (statusRef.current === "connected") setStatusText("The streamed avatar disconnected. Your local teacher is still here; the voice call continues.");
+          });
+          await avatar.start();
+        } catch {
+          const failedAvatar = avatarRef.current as { stop?: () => Promise<unknown> } | null;
+          if (failedAvatar?.stop) void failedAvatar.stop().catch(() => undefined);
+          avatarRef.current = null;
           setAvatarReady(false);
-          if (statusRef.current === "connected") setStatusText("The animated teacher disconnected. End the call and reconnect.");
-        });
-        await avatar.start();
+          setLocalAvatarActive(true);
+          setStatusText("Using Courant's local animated teacher. Live voice and your optional camera still work.");
+        }
       }
 
       const context = new AudioContext();
@@ -202,7 +223,9 @@ export default function LiveCallPage() {
           setupComplete = true;
           statusRef.current = "connected";
           setStatus("connected");
-          setStatusText(mode === "video" ? "Connected. Say hello to your English teacher." : "Connected. Say hello whenever you're ready.");
+          setStatusText(mode === "video"
+            ? (localAvatarActive ? "Connected. Your local English teacher is here. Say hello whenever you're ready." : "Connected. Say hello to your English teacher.")
+            : "Connected. Say hello whenever you're ready.");
           socket.send(JSON.stringify({ clientContent: { turns: [{ role: "user", parts: [{ text: "Start our English practice now. Briefly introduce yourself and ask one friendly opening question." }] }], turnComplete: true } }));
           return;
         }
@@ -217,8 +240,10 @@ export default function LiveCallPage() {
         }
         if (server?.outputTranscription?.text) {
           outputTranscript += String(server.outputTranscription.text);
+          setAvatarSpeaking(true);
         }
         if (server?.turnComplete) {
+          setAvatarSpeaking(false);
           if (outputTranscript.trim()) {
             addLine("courant", outputTranscript.trim());
             if (mode === "video" && avatarRef.current) {
@@ -233,6 +258,7 @@ export default function LiveCallPage() {
           setStatusText("Your turn. Speak naturally; you can interrupt Courant at any time.");
         }
         if (server?.interrupted) {
+          setAvatarSpeaking(false);
           outputTranscript = "";
           playbackTimeRef.current = context.currentTime;
           const avatar = avatarRef.current as { interrupt?: () => void } | null;
@@ -300,6 +326,8 @@ export default function LiveCallPage() {
       if (avatar?.stop) void avatar.stop().catch(() => undefined);
       avatarRef.current = null;
       setAvatarReady(false);
+      setLocalAvatarActive(false);
+      setAvatarSpeaking(false);
       if (avatarVideoRef.current) avatarVideoRef.current.srcObject = null;
       statusRef.current = "idle";
       setStatus("idle");
@@ -348,6 +376,16 @@ export default function LiveCallPage() {
 
   return <AppShell>
     <div className="mx-auto max-w-6xl">
+      <style>{`
+        @keyframes courant-live-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+        @keyframes courant-live-blink { 0%,44%,48%,100% { transform: scaleY(1); } 46%,47% { transform: scaleY(.12); } }
+        @keyframes courant-live-mouth { from { transform: scaleY(.55); } to { transform: scaleY(1.2); } }
+        .courant-live-avatar { animation: courant-live-float 4.2s ease-in-out infinite; transform-origin: 50% 90%; }
+        .courant-live-eye { transform-box: fill-box; transform-origin: center; animation: courant-live-blink 5.4s ease-in-out infinite; }
+        .courant-live-mouth { transform-box: fill-box; transform-origin: center; }
+        .courant-live-avatar-speaking .courant-live-mouth { animation: courant-live-mouth .24s ease-in-out infinite alternate; }
+        @media (prefers-reduced-motion: reduce) { .courant-live-avatar,.courant-live-eye,.courant-live-mouth { animation: none !important; } }
+      `}</style>
       <header className="flex flex-col justify-between gap-5 border-b border-[var(--line)] pb-6 sm:flex-row sm:items-end">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--accent)]">Courant live coach</p>
@@ -374,7 +412,27 @@ export default function LiveCallPage() {
             {mode === "video" && <video ref={avatarVideoRef} autoPlay playsInline className={`absolute inset-0 h-full w-full object-cover transition-opacity ${avatarReady ? "opacity-100" : "opacity-0"}`} aria-label="Animated AI English teacher video"/>}
             <div className="absolute inset-0 opacity-30" aria-hidden="true" style={{ background: "radial-gradient(circle at 50% 45%, #738b7e 0, transparent 42%)" }}/>
             {mode === "video" && active ? <video ref={videoRef} autoPlay muted playsInline className="absolute bottom-4 right-4 z-20 h-32 w-24 rounded-2xl border border-white/30 object-cover shadow-xl sm:h-40 sm:w-32"/> : null}
-            {!avatarReady && <div className={`relative z-10 grid h-28 w-28 place-items-center rounded-full border border-white/15 bg-white/10 shadow-2xl backdrop-blur-sm sm:h-36 sm:w-36 ${status === "connected" ? "animate-pulse" : ""}`}>
+            {!avatarReady && mode === "video" && localAvatarActive ? (
+              <div className={`relative z-10 flex flex-col items-center ${avatarSpeaking ? "courant-live-avatar-speaking" : ""}`}>
+                <svg viewBox="0 0 240 260" role="img" aria-label={avatarSpeaking ? "Courant's local English teacher is speaking" : "Courant's local animated English teacher"} className="courant-live-avatar h-64 w-56 drop-shadow-2xl sm:h-72 sm:w-64">
+                  <ellipse cx="120" cy="244" rx="82" ry="10" fill="#82978b" opacity=".55"/>
+                  <path d="M35 250c5-48 37-75 85-75s80 27 85 75" fill="#708779"/>
+                  <path d="M61 107c-5-60 18-94 60-94 49 0 69 39 60 104l-13 47H74z" fill="#343d38"/>
+                  <ellipse cx="120" cy="111" rx="57" ry="68" fill="#e9bea0"/>
+                  <path d="M63 103c-4-54 20-88 59-90 43-2 64 30 60 79-17-9-29-24-35-42-21 24-47 37-84 36z" fill="#343d38"/>
+                  <path d="M76 109q12-9 24 0M140 109q12-9 24 0" fill="none" stroke="#694f43" strokeWidth="4" strokeLinecap="round"/>
+                  <ellipse className="courant-live-eye" cx="91" cy="120" rx="4" ry="5" fill="#2e332f"/>
+                  <ellipse className="courant-live-eye" cx="149" cy="120" rx="4" ry="5" fill="#2e332f"/>
+                  <path d="M119 124l-5 17 10 3" fill="none" stroke="#c58e72" strokeWidth="2.5" strokeLinecap="round"/>
+                  {avatarSpeaking
+                    ? <ellipse className="courant-live-mouth" cx="120" cy="158" rx="11" ry="9" fill="#8d4f4c" stroke="#75403e" strokeWidth="2"/>
+                    : <path d="M105 156q15 12 30 0" fill="none" stroke="#9b5c55" strokeWidth="3.5" strokeLinecap="round"/>}
+                  <path d="M75 195q45 24 90 0" fill="none" stroke="#9aaf9f" strokeWidth="4" opacity=".75"/>
+                </svg>
+                <span className="mt-1 rounded-full bg-black/35 px-4 py-1.5 text-xs font-medium tracking-wide text-white/90">Courant · your English teacher</span>
+                <span className="mt-2 text-[10px] text-white/55">On-device animated avatar · no avatar API required</span>
+              </div>
+            ) : !avatarReady && <div className={`relative z-10 grid h-28 w-28 place-items-center rounded-full border border-white/15 bg-white/10 shadow-2xl backdrop-blur-sm sm:h-36 sm:w-36 ${status === "connected" ? "animate-pulse" : ""}`}>
               <div className="grid h-20 w-20 place-items-center rounded-full bg-[#e8eee8] text-3xl text-[#263b32] sm:h-28 sm:w-28" aria-hidden="true">✳</div>
             </div>}
             <p className="relative z-10 mt-6 text-xl font-medium">{mode === "video" && avatarReady ? "Your English teacher is here." : status === "connected" ? "Courant is here." : status === "connecting" ? "Setting up your call…" : "Your English conversation partner"}</p>
