@@ -5,8 +5,8 @@ This checklist separates repository checks from launch tasks that require real c
 ## Eight workstreams
 
 ### 1. Build, lint, dependency and route checks
-- [x] CI blocks on high-severity production dependency vulnerabilities and separately reports full-tree findings. The full-tree report currently includes an unpatched development-tooling advisory for braces (GHSA-vfj7-8cjw-p6xm); it is report-only because no fixed release is published and the production-only audit remains blocking. CI also runs ESLint, security unit tests, production build, and production smoke tests.
-- [x] Smoke checks cover key public routes, security headers, expected auth boundaries, unavailable-provider responses, malformed/oversized coaching requests, and oversized streamed bodies without `Content-Length`.
+- [x] GitHub Actions runs ESLint, the security/input unit tests, and a production Next.js build on pushes to `main` and pull requests.
+- [ ] Add a production dependency audit and HTTP smoke tests for key routes, security headers, auth boundaries, and unavailable-provider responses; these are not yet part of CI.
 - [x] Learner JSON APIs use a shared streaming byte limit instead of trusting `Content-Length` or buffering unbounded request bodies.
 - [x] Node test suite covers valid objects, malformed JSON, non-object JSON, declared-size rejection, and streamed oversized bodies.
 - [x] Teacher write/delete handlers apply rate limits before bounded streaming JSON parsing; classroom cascades use PostgreSQL foreign-key cascades and row-level security.
