@@ -5,7 +5,8 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const requested = url.searchParams.get("next") || "/login";
-  const next = requested.startsWith("/") && !requested.startsWith("//") ? requested : "/login";
+  let next = "/login";
+  try { const candidate = new URL(requested, url.origin); if (candidate.origin === url.origin) next = candidate.pathname + candidate.search + candidate.hash; } catch { /* Invalid redirect targets fall back to sign-in. */ }
   if (!code) return NextResponse.redirect(new URL("/login?error=confirmation", url.origin));
   try {
     const supabase = await createSupabaseServerClient();
