@@ -204,7 +204,7 @@ export default function LiveCallPage() {
       silentGain.connect(context.destination);
 
       const token = encodeURIComponent(sessionData.clientSecret);
-      const socket = new WebSocket(`wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${token}`);
+      const socket = new WebSocket(`wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${token}`);
       channelRef.current = socket;
       let setupComplete = false;
       let outputTranscript = "";
