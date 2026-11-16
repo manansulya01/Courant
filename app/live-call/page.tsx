@@ -223,9 +223,7 @@ export default function LiveCallPage() {
           setupComplete = true;
           statusRef.current = "connected";
           setStatus("connected");
-          setStatusText(mode === "video"
-            ? (localAvatarActive ? "Connected. Your local English teacher is here. Say hello whenever you're ready." : "Connected. Say hello to your English teacher.")
-            : "Connected. Say hello whenever you're ready.");
+          setStatusText(mode === "video" ? "Connected. Say hello to your English teacher." : "Connected. Say hello whenever you're ready.");
           socket.send(JSON.stringify({ clientContent: { turns: [{ role: "user", parts: [{ text: "Start our English practice now. Briefly introduce yourself and ask one friendly opening question." }] }], turnComplete: true } }));
           return;
         }
