@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   try {
     const supabase = await createSupabaseServerClient();
-    const redirectTo = new URL("/reset-password", new URL(request.url).origin).toString();
+    const redirectTo = new URL("/auth/callback?next=%2Freset-password", new URL(request.url).origin).toString();
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) return NextResponse.json({ error: "Password recovery email could not be sent. Please try again later." }, { status: 503 });
     return NextResponse.json({ ok: true, message: "If an account matches that email, a password reset link will arrive shortly." }, { headers: { "Cache-Control": "no-store" } });
