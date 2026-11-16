@@ -1,34 +1,24 @@
-import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import { hashPassword } from "@/lib/auth";
 import { checkRateLimit, isSameOrigin } from "@/lib/security";
-import { getDatabase } from "@/lib/mongodb";
+import { createSupabaseServerClient } from "@/lib/auth";
 import { readBoundedJson } from "@/lib/bounded-json";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Request origin was not accepted." }, { status: 403 });
+  try { const rate = await checkRateLimit(request, "password-reset", 8, 3600); if (!rate.allowed) return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 3600) } }); }
+  catch { return NextResponse.json({ error: "Password reset is temporarily unavailable." }, { status: 503 }); }
+  const parsed = await readBoundedJson(request, 4_000);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+  const password = typeof parsed.value.password === "string" ? parsed.value.password : "";
+  if (password.length < 10 || password.length > 128) return NextResponse.json({ error: "Use a password between 10 and 128 characters." }, { status: 400 });
   try {
-    const rate = await checkRateLimit(request, "password-reset", 8, 3600);
-    if (!rate.allowed) return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(rate.retryAfter || 3600) } });
-  } catch { return NextResponse.json({ error: "Password reset is temporarily unavailable." }, { status: 503 }); }
-  try {
-    const parsed = await readBoundedJson(request, 4_000);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
-    const body = parsed.value;
-    const token = typeof body.token === "string" ? body.token : "";
-    const password = typeof body.password === "string" ? body.password : "";
-    if (password.length < 10 || password.length > 128) return NextResponse.json({ error: "Use a password between 10 and 128 characters." }, { status: 400 });
-    if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
-    const tokenHash = createHash("sha256").update(token).digest("hex");
-    const db = await getDatabase();
-    const record = await db.collection("passwordResetTokens").findOneAndDelete({ tokenHash, usedAt: null, expiresAt: { $gt: new Date() } });
-    if (!record || !ObjectId.isValid(record.userId)) return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
-    const passwordHash = await hashPassword(password);
-    const result = await db.collection("users").updateOne({ _id: new ObjectId(record.userId), status: "active" }, { $set: { passwordHash, updatedAt: new Date(), passwordChangedAt: new Date() } });
-    if (!result.matchedCount) return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
-    await db.collection("passwordResetTokens").deleteMany({ userId: record.userId });
+    const supabase = await createSupabaseServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return NextResponse.json({ error: "Open the password reset link from your email first." }, { status: 401 });
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return NextResponse.json({ error: "Could not reset your password. Request a new link and try again." }, { status: 400 });
+    await supabase.auth.signOut();
     return NextResponse.json({ ok: true, message: "Password changed. You can now sign in with your new password." }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Could not reset your password. Request a new link and try again." }, { status: 503 }); }
 }
