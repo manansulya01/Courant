@@ -7,7 +7,7 @@ Courant is a calm, touch-friendly speaking and communication practice app built 
 1. Install Node.js 22 LTS.
 2. Run `npm install`.
 3. Copy `.env.example` to `.env.local`.
-4. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the Supabase project. The Courant production project is hosted in Mumbai; its schema, RLS policies, Auth trigger, and rate-limit functions are provisioned by the database migrations.
+4. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY and the server-only COURANT_RATE_LIMIT_SECRET` from the Supabase project. The Courant production project is hosted in Mumbai; its schema, RLS policies, Auth trigger, and rate-limit functions are provisioned by the database migrations.
 5. Student accounts use Supabase Auth email confirmation. Teacher accounts require one of the one-time school invitation codes issued for the Courant project. Never expose database secret/service-role keys in the browser.
 7. Add a Gemini API key to `GEMINI_API_KEY` for the migrated text/image tutor and Gemini Live calls. Keep it server-side; never prefix it with `NEXT_PUBLIC_`. The default models are configured by `GEMINI_TEXT_MODEL` and `GEMINI_LIVE_MODEL`.
 8. Speech generation and recorded-audio transcription also use Gemini. Configure `GEMINI_TTS_MODEL` (default `gemini-2.5-flash-preview-tts`) and `GEMINI_TRANSCRIPTION_MODEL` (default `gemini-2.5-flash`) if you need to override the defaults. All AI provider keys remain server-side.
