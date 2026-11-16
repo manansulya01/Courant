@@ -2,7 +2,7 @@ services:
   - type: web
     name: courant
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm install --no-audit --no-fund && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
