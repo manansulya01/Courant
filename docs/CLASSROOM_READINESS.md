@@ -23,7 +23,8 @@ This checklist separates repository checks from launch tasks that require real c
 - [ ] Configure Supabase Auth redirect URLs and production SMTP; test signup confirmation and password recovery end-to-end.
 - [ ] Run multi-account tests proving students and teachers cannot access another user's portfolio, class, submissions or progress by changing IDs.
 - [ ] Import legacy MongoDB accounts and records if the old database becomes available; existing MongoDB credentials are not migrated automatically.
-- [ ] Reconstruct and check in the complete ordered Supabase bootstrap migration history; the repository currently contains only two recent security hardening migrations, so a clean database cannot yet be recreated from Git alone.
+- [x] Recovered all 16 ordered Supabase migrations from the connected project's migration ledger and committed them under `supabase/migrations`.
+- [ ] Replay all 16 migrations against a clean staging project; generate and configure a fresh server-only rate-limit/class-join secret, issue teacher invitation codes, and verify the full signup/classroom flow before production rollout.
 
 ### 3. AI conversation and speech reliability
 - [x] English conversation page supports push-to-talk, transcription, spoken replies, replay and text/browser speech fallback.
