@@ -96,10 +96,14 @@ export async function POST(request: Request) {
     });
 
     if (!upstream.ok) {
+      const details = await upstream.json().catch(async () => ({ error: { message: await upstream.text().catch(() => "") } })) as { error?: { message?: string } };
+      const reason = typeof details.error?.message === "string" ? details.error.message.slice(0, 240) : "Unknown Gemini API error";
+      console.error("Gemini live token setup failed:", upstream.status, reason);
       if (upstream.status === 429) return fail("Live voice is busy or the Gemini API quota is exhausted. Check your Google AI Studio usage and try again.", 429);
-      const details = await upstream.text().catch(() => "");
-      console.error("Gemini live token setup failed:", upstream.status, details.slice(0, 400));
-      return fail("Could not start a live call. Check that Gemini Live API is enabled for this Google AI project and model.", 502);
+      if (upstream.status === 403) return fail("Google denied Gemini Live access. Check that the Gemini API is enabled and the API key is allowed to use it.", 502);
+      if (upstream.status === 404) return fail("The configured Gemini Live model or API endpoint was not found. Check GEMINI_LIVE_MODEL in Vercel.", 502);
+      if (upstream.status === 400) return fail(`Gemini rejected the live session configuration: ${reason}`, 502);
+      return fail("Gemini could not create a live session. Please try again.", 502);
     }
 
     const data = await upstream.json() as { name?: unknown; expireTime?: unknown };
