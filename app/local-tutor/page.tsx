@@ -55,10 +55,49 @@ export default function LocalTutorPage() {
   const [cameraStatus, setCameraStatus] = useState("Camera is off. Turn it on for a private self-preview.");
   const [lessonReview, setLessonReview] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [rememberProgress, setRememberProgress] = useState(false);
+  const [savedLearningContext, setSavedLearningContext] = useState("");
+  const [memoryLoaded, setMemoryLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const engineRef = useRef<LocalEngine | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("courant-learning-progress-v1");
+      if (saved) {
+        const parsed = JSON.parse(saved) as { enabled?: boolean; lines?: ChatLine[]; review?: string; level?: string; lessonGoal?: string; lessonMode?: string };
+        if (parsed.enabled) {
+          setRememberProgress(true);
+          if (Array.isArray(parsed.lines)) setLines(parsed.lines.slice(-30));
+          if (typeof parsed.review === "string") setSavedLearningContext(parsed.review);
+          if (typeof parsed.level === "string") setLevel(parsed.level);
+          if (typeof parsed.lessonGoal === "string") setLessonGoal(parsed.lessonGoal);
+          if (typeof parsed.lessonMode === "string") setLessonMode(parsed.lessonMode);
+        }
+      }
+    } catch {
+      window.localStorage.removeItem("courant-learning-progress-v1");
+    } finally {
+      setMemoryLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!memoryLoaded) return;
+    if (!rememberProgress) {
+      window.localStorage.removeItem("courant-learning-progress-v1");
+      return;
+    }
+    try {
+      window.localStorage.setItem("courant-learning-progress-v1", JSON.stringify({
+        enabled: true, lines: lines.slice(-30), review: savedLearningContext, level, lessonGoal, lessonMode,
+      }));
+    } catch {
+      setStatus("This browser could not save learning progress. Your current lesson still works normally.");
+    }
+  }, [memoryLoaded, rememberProgress, lines, savedLearningContext, level, lessonGoal, lessonMode]);
 
   useEffect(() => () => {
     recognitionRef.current?.stop();
@@ -169,11 +208,11 @@ export default function LocalTutorPage() {
     setLessonReview("");
     try {
       const engine = await ensureModel();
-      const transcript = lines.map(line => `${line.role === "you" ? "Learner" : "Teacher"}: ${line.text}`).join("\\n").slice(-9000);
+      const transcript = lines.map(line => `${line.role === "you" ? "Learner" : "Teacher"}: ${line.text}`).join("\n").slice(-9000);
       const result = await engine.chat.completions.create({
         messages: [
           { role: "system", content: "You are an expert, encouraging English teacher. Review this one-to-one lesson transcript. Give a concise learner-friendly lesson report with: 1) what the learner did well, 2) up to three useful corrections with natural alternatives, 3) two vocabulary or expression upgrades, 4) one specific practice task for next time. Be accurate and never invent mistakes. Use clear headings and plain text." },
-          { role: "user", content: `Learner level: ${level}. Goal: ${lessonGoal}. Lesson style: ${lessonMode}. Transcript:\\n${transcript}` }
+          { role: "user", content: `Learner level: ${level}. Goal: ${lessonGoal}. Lesson style: ${lessonMode}. Transcript:\n${transcript}` }
         ],
         temperature: 0.3,
         max_tokens: 320
@@ -181,6 +220,7 @@ export default function LocalTutorPage() {
       const review = String(result.choices?.[0]?.message?.content || "").trim();
       if (!review) throw new Error("The lesson review was empty. Please try again.");
       setLessonReview(review);
+      setSavedLearningContext(review);
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Could not create lesson review.");
     } finally {
@@ -210,7 +250,7 @@ export default function LocalTutorPage() {
       const messages: ModelMessage[] = [
         {
           role: "system",
-          content: `You are Courant, the learner's dedicated one-to-one English tutor. This is a private lesson, not a generic chatbot. Learner level: ${level}. Lesson format: ${lessonMode}. Learner's goal: ${lessonGoal}. Lead the lesson actively: ask only ONE question at a time, respond to the meaning of the learner's answer, and choose the next question based on what they said. Keep the conversation warm, natural and age-appropriate. Correct important errors gently using a short natural correction and one brief reason; do not interrupt every sentence to correct tiny errors. Help the learner express their own ideas. For role-play, stay in character and make the scenario realistic. For grammar, explain briefly then ask the learner to make their own example. For pronunciation, give a short phrase to say and explain stress or sounds; do not claim to evaluate audio you cannot access. For conversation, keep a genuine back-and-forth going. Track strengths and recurring mistakes within this conversation. End with one clear next step or one follow-up question. Do not claim to have heard audio or seen video.`,
+          content: `You are Courant, the learner's dedicated one-to-one English tutor. This is a private lesson, not a generic chatbot. Learner level: ${level}. Lesson format: ${lessonMode}. Learner's goal: ${lessonGoal}. Previous learning notes: ${savedLearningContext || "No previous saved lesson notes."}. Lead the lesson actively: ask only ONE question at a time, respond to the meaning of the learner's answer, and choose the next question based on what they said. Keep the conversation warm, natural and age-appropriate. Correct important errors gently using a short natural correction and one brief reason; do not interrupt every sentence to correct tiny errors. Help the learner express their own ideas. For role-play, stay in character and make the scenario realistic. For grammar, explain briefly then ask the learner to make their own example. For pronunciation, give a short phrase to say and explain stress or sounds; do not claim to evaluate audio you cannot access. For conversation, keep a genuine back-and-forth going. Track strengths and recurring mistakes within this conversation. End with one clear next step or one follow-up question. Do not claim to have heard audio or seen video.`,
         },
         ...history.slice(-12).map(line => ({
           role: line.role === "you" ? "user" as const : "assistant" as const,
@@ -288,8 +328,9 @@ export default function LocalTutorPage() {
               </select>
             </label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={rememberProgress} onChange={event => setRememberProgress(event.target.checked)} /> Remember my progress on this device</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model is larger and needs a capable WebGPU device and more memory. It downloads on first use, then runs on-device. Speech recognition depends on browser support; spoken replies use your device's installed voices.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model is larger and needs a capable WebGPU device and more memory. It downloads on first use, then runs on-device. Speech recognition depends on browser support; spoken replies use your device's installed voices. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
@@ -343,7 +384,7 @@ export default function LocalTutorPage() {
             <button type="submit" disabled={loading || !prompt.trim()} style={{ border: 0, borderRadius: 12, padding: "0 18px", minHeight: 48, background: "#343b2d", color: "white", cursor: "pointer", opacity: loading || !prompt.trim() ? .55 : 1 }}>Send</button>
           </form>
         </section>
-        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Your tutor follows the recent turns in this lesson while this page stays open. On-device AI needs a WebGPU-capable browser and sufficient device memory. Microphone recognition and system voices vary by device.</p>
+        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Your tutor follows recent turns in this lesson. If you opt in, Courant also saves a short learning history and your latest lesson review in this browser so the next lesson can build on it. On-device AI needs a WebGPU-capable browser and sufficient device memory. Microphone recognition and system voices vary by device.</p>
       </div>
     </main>
   );
