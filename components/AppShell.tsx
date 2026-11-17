@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,12 +14,23 @@ const navigation = [
   { label: "Account settings", href: "/settings", number: "07" },
 ];
 
+type ShellUser = { name: string; email: string; role: string };
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<ShellUser | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/me").then(response => response.json()).then(data => {
+      if (active && data.user) setUser(data.user as ShellUser);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
   const pathname = usePathname();
   const date = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 
   return <div className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+    <a href="#main-content" className="sr-only z-50 rounded-full bg-white px-4 py-2 text-sm font-semibold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
     {open && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setOpen(false)} />}
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-[var(--line)] bg-[var(--surface)] px-5 py-6 transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
       <Link href="/" className="flex items-center gap-3 px-3 py-2" onClick={() => setOpen(false)}>
@@ -49,9 +60,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Link href="/labs" className="mt-3 inline-block text-xs font-semibold text-[var(--accent)]">Start a session ↗</Link>
       </div>
       <div className="mt-5 flex items-center gap-3 border-t border-[var(--line)] pt-5 px-2">
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-[#e9e5d9] text-xs font-semibold">G</div>
-        <div><p className="text-xs font-semibold">Guest learner</p><p className="mt-1 text-[10px] text-[var(--muted)]">Demo workspace</p></div>
-        <Link href="/settings" className="ml-auto text-xs text-[var(--muted)]" aria-label="Account settings">↗</Link>
+        <div className="grid h-9 w-9 place-items-center rounded-full bg-[#e9e5d9] text-xs font-semibold">{user?.name?.trim()?.charAt(0)?.toUpperCase() || "G"}</div>
+        <div className="min-w-0"><p className="max-w-[150px] truncate text-xs font-semibold">{user?.name || "Guest learner"}</p><p className="mt-1 text-[10px] capitalize text-[var(--muted)]">{user ? user.role + " account" : "Not signed in"}</p></div>
+        <Link href={user ? "/settings" : "/login"} className="ml-auto text-xs text-[var(--muted)]" aria-label={user ? "Account settings" : "Sign in"}>{user ? "↗" : "Sign in"}</Link>
       </div>
     </aside>
     <div className="lg:pl-[260px]">
@@ -62,7 +73,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <Link href="/labs" className="rounded-full bg-[var(--accent)] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[var(--accent-hover)]">New practice <span className="ml-2">↗</span></Link>
       </header>
-      <main className="px-4 py-8 md:px-9 md:py-10">{children}</main>
+      <main id="main-content" tabIndex={-1} className="px-4 py-8 md:px-9 md:py-10">{children}</main>
     </div>
   </div>;
 }
