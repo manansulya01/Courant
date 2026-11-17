@@ -150,7 +150,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       const result = await engine.chat.completions.create({ messages, temperature: 0.55, max_tokens: 240 });
       const reply = String(result.choices?.[0]?.message?.content || "").trim();
       if (!reply) throw new Error("The local teacher returned an empty reply. Please try again.");
-      setHistory(old => [...old, userTurn, { role: "assistant", content: reply }].slice(-24));
+      setHistory(old => [...old, userTurn, { role: "assistant" as const, content: reply }].slice(-24));
       setDraft(""); setImage(""); setImageName("");
       setNotice("Courant replied using the local model. Your turn — try the exercise.");
       speak(reply);
