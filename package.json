@@ -15,7 +15,8 @@
     "react-dom": "latest",
     "@mlc-ai/web-llm": "^0.2.80",
     "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.57.0"
+    "@supabase/supabase-js": "^2.57.0",
+    "@huggingface/transformers": "^3.7.2"
   },
   "overrides": {
     "minimatch": "^11.0.1"
