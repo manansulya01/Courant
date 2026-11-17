@@ -99,11 +99,11 @@ export default function LocalTutorPage() {
   async function ensureModel(): Promise<LocalEngine> {
     if (engineRef.current) return engineRef.current;
     if (!(typeof navigator !== "undefined" && "gpu" in navigator)) {
-      throw new Error("WebGPU is unavailable in this browser. Use a compatible, up-to-date browser and device, or use Courant's hosted conversation room.");
+      throw new Error("This browser does not support WebGPU, which is required for private on-device AI. Try a recent Chrome or Edge browser on a supported device, or use text practice lessons instead.");
     }
     setStatus("Preparing the local model. The first download may take a few minutes…");
     const webllm = await import("@mlc-ai/web-llm");
-    const engine = await webllm.CreateMLCEngine("Llama-3.2-1B-Instruct-q4f16_1-MLC", {
+    const engine = await webllm.CreateMLCEngine("SmolLM2-360M-Instruct-q4f16_1-MLC", {
       initProgressCallback: (report: { progress?: number; text?: string }) => {
         setProgress(Math.round(Math.max(0, Math.min(1, report.progress ?? 0)) * 100));
         setStatus(report.text || "Downloading model weights…");
@@ -120,7 +120,7 @@ export default function LocalTutorPage() {
     const speechWindow = window as SpeechWindow;
     const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setStatus("Speech input is not supported by this browser. You can still type, or use Courant's hosted talk room.");
+      setStatus("Speech recognition is not available in this browser. You can still type, and Courant can read replies aloud using your device voice.");
       return;
     }
     if (listening) {
@@ -225,16 +225,16 @@ export default function LocalTutorPage() {
         <header style={{ margin: "40px 0 28px" }}>
           <p style={{ color: "#6b725d", letterSpacing: ".12em", textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>Private practice · on-device AI</p>
           <h1 style={{ fontSize: "clamp(34px, 6vw, 54px)", letterSpacing: "-.045em", lineHeight: 1.05, fontWeight: 600, margin: "12px 0" }}>A little practice goes a long way.</h1>
-          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Practise with a small language model running on your device, a simple animated teacher, and optional camera self-preview. Speak or type naturally. No avatar or conversation API is used in this room.</p>
+          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Practise with a lightweight language model running on your device, a simple animated teacher, and optional camera self-preview. Speak or type naturally. No AI API key, subscription, or avatar service is required.</p>
         </header>
 
         <section style={{ background: "#fff", border: "1px solid #e8e7df", borderRadius: 20, padding: 22, marginBottom: 18 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ minWidth: 220, flex: 1 }}>
-              <strong style={{ display: "block", marginBottom: 5 }}>Local tutor model</strong>
+              <strong style={{ display: "block", marginBottom: 5 }}>On-device tutor · compact model</strong>
               <span role="status" style={{ color: "#72746c", fontSize: 13 }}>{status}</span>
             </div>
-            <button type="button" onClick={() => { setLoading(true); ensureModel().catch(error => setStatus(error instanceof Error ? error.message : "Could not load model.")).finally(() => setLoading(false)); }} disabled={loading || ready} style={{ border: 0, borderRadius: 999, background: "#343b2d", color: "white", padding: "12px 18px", cursor: "pointer", opacity: loading || ready ? .6 : 1 }}>{ready ? "Model ready" : loading ? "Loading…" : "Load local model"}</button>
+            <button type="button" onClick={() => { setLoading(true); ensureModel().catch(error => setStatus(error instanceof Error ? error.message : "Could not load model.")).finally(() => setLoading(false)); }} disabled={loading || ready} style={{ border: 0, borderRadius: 999, background: "#343b2d", color: "white", padding: "12px 18px", cursor: "pointer", opacity: loading || ready ? .6 : 1 }}>{ready ? "Model ready" : loading ? "Loading…" : "Prepare tutor"}</button>
           </div>
           <div aria-label={`Model download progress ${progress}%`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} style={{ height: 5, background: "#efeee8", borderRadius: 99, overflow: "hidden", marginTop: 18 }}>
             <div style={{ width: `${progress}%`, height: "100%", background: "#87916f", transition: "width .2s" }} />
@@ -247,7 +247,7 @@ export default function LocalTutorPage() {
             </label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The model weights download on first use and require WebGPU. Speech recognition is provided by your browser and may use its own online service; spoken replies use installed system voices and may not work offline on every device.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The compact model downloads once (about 376 MB) and then runs on-device with WebGPU. Speech recognition depends on browser support and may use the browser provider; spoken replies use your device's installed voices.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
@@ -296,7 +296,7 @@ export default function LocalTutorPage() {
             <button type="submit" disabled={loading || !prompt.trim()} style={{ border: 0, borderRadius: 12, padding: "0 18px", minHeight: 48, background: "#343b2d", color: "white", cursor: "pointer", opacity: loading || !prompt.trim() ? .55 : 1 }}>Send</button>
           </form>
         </section>
-        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Local inference is experimental and device-dependent. The animated teacher is a lightweight visual companion, not a photorealistic avatar; the camera is a private self-preview and is not analysed by the local model. For real-time voice/video AI, use the regular <a href="/talk" style={{ textDecoration: "underline" }}>Courant conversation room</a> when its provider credentials are configured.</p>
+        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>The local teacher is designed to work without paid AI services. The animated teacher is a lightweight 2D companion, not a photorealistic avatar; the camera is a private self-preview and is not analysed. On-device AI requires a WebGPU-capable browser. Microphone recognition and system voices vary by device.</p>
       </div>
     </main>
   );
