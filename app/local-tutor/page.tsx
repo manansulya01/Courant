@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 type ChatLine = { role: "you" | "teacher"; text: string };
 type ModelMessage = { role: "system" | "user" | "assistant"; content: string };
+type LocalPipeline = (input: unknown) => Promise<unknown>;
 type LocalEngine = {
   chat: {
     completions: {
@@ -44,6 +45,10 @@ export default function LocalTutorPage() {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [selectedImage, setSelectedImage] = useState("");
+  const [selectedImageName, setSelectedImageName] = useState("");
+  const [visionBusy, setVisionBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("The local model has not been downloaded yet.");
   const [voiceEnabled, setVoiceEnabled] = useState(true);
@@ -62,6 +67,11 @@ export default function LocalTutorPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const engineRef = useRef<LocalEngine | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const speechPipelineRef = useRef<LocalPipeline | null>(null);
+  const visionPipelineRef = useRef<LocalPipeline | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
@@ -101,6 +111,7 @@ export default function LocalTutorPage() {
 
   useEffect(() => () => {
     recognitionRef.current?.stop();
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     streamRef.current?.getTracks().forEach(track => track.stop());
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
@@ -159,53 +170,113 @@ export default function LocalTutorPage() {
     return engineRef.current;
   }
 
-  function startListening() {
-    const speechWindow = window as SpeechWindow;
-    const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setStatus("Speech recognition is not available in this browser. You can still type, and Courant can read replies aloud using your device voice.");
-      return;
-    }
+  async function ensureSpeechModel(): Promise<LocalPipeline> {
+    if (speechPipelineRef.current) return speechPipelineRef.current;
+    setStatus("Loading local Whisper speech recognition…");
+    const transformers = await import("@huggingface/transformers");
+    const createPipeline = transformers.pipeline as unknown as (task: string, model: string, options?: Record<string, unknown>) => Promise<LocalPipeline>;
+    speechPipelineRef.current = await createPipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en", { dtype: "q8" });
+    return speechPipelineRef.current;
+  }
+
+  async function ensureVisionModel(): Promise<LocalPipeline> {
+    if (visionPipelineRef.current) return visionPipelineRef.current;
+    setStatus("Loading local picture understanding…");
+    const transformers = await import("@huggingface/transformers");
+    const createPipeline = transformers.pipeline as unknown as (task: string, model: string, options?: Record<string, unknown>) => Promise<LocalPipeline>;
+    visionPipelineRef.current = await createPipeline("image-to-text", "Xenova/vit-gpt2-image-captioning", { dtype: "q8" });
+    return visionPipelineRef.current;
+  }
+
+  async function startListening() {
     if (listening) {
-      recognitionRef.current?.stop();
+      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       setListening(false);
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.onresult = (event) => {
-      const resultEvent = event as SpeechResultEvent;
-      let transcript = "";
-      for (let index = resultEvent.resultIndex; index < resultEvent.results.length; index += 1) {
-        const result = resultEvent.results[index];
-        if (result.isFinal) transcript += result[0].transcript;
-      }
-      const finalText = transcript.trim();
-      if (finalText) {
-        setPrompt(finalText);
-        recognition.stop();
-        void processMessage(finalText);
-      }
-    };
-    recognition.onerror = () => {
-      setStatus("Microphone speech recognition stopped. If your speech was recognised, Courant will respond; otherwise check microphone permission and try again.");
-      setListening(false);
-    };
-    recognition.onend = () => {
-      setListening(false);
-      recognitionRef.current = null;
-    };
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      setListening(true);
-      setStatus("Listening… when you finish speaking, Courant will automatically send your words and reply.");
-    } catch {
-      setListening(false);
-      setStatus("The microphone could not start. Check browser permission and try again.");
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      setStatus("This browser cannot record audio here. You can still type your answer.");
+      return;
     }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find(type => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = event => { if (event.data.size) audioChunksRef.current.push(event.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        setListening(false);
+        setTranscribing(true);
+        setStatus("Transcribing privately on this device…");
+        let context: AudioContext | null = null;
+        try {
+          const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+          context = new AudioContext();
+          const decoded = await context.decodeAudioData(await blob.arrayBuffer());
+          const frames = Math.ceil(decoded.duration * 16000);
+          const offline = new OfflineAudioContext(1, frames, 16000);
+          const source = offline.createBufferSource();
+          source.buffer = decoded;
+          source.connect(offline.destination);
+          source.start();
+          const audio = await offline.startRendering();
+          const transcriber = await ensureSpeechModel();
+          const result = await transcriber(audio.getChannelData(0));
+          const transcript = typeof result === "object" && result !== null && "text" in result ? String((result as { text: unknown }).text).trim() : "";
+          if (!transcript) throw new Error("No words were recognised. Try speaking closer to the microphone.");
+          setPrompt(transcript);
+          setStatus("Whisper transcribed your speech on this device. Review the words, then send them to your teacher.");
+        } catch (cause) {
+          setStatus(cause instanceof Error ? cause.message : "Local speech recognition failed. You can type your answer instead.");
+        } finally {
+          if (context && context.state !== "closed") await context.close().catch(() => undefined);
+          setTranscribing(false);
+        }
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setListening(true);
+      setStatus("Recording on this device. Speak naturally, then tap Stop listening.");
+    } catch {
+      setStatus("Microphone permission was not granted or recording is unavailable. You can continue by typing.");
+    }
+  }
+
+  async function choosePicture(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setStatus("Choose an image file."); return; }
+    if (file.size > 5 * 1024 * 1024) { setStatus("Choose an image smaller than 5 MB."); return; }
+    try {
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject();
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      setSelectedImage(data);
+      setSelectedImageName(file.name);
+      setStatus("Picture ready. Courant will analyse it locally when you send your message.");
+    } catch {
+      setStatus("That picture could not be opened. Try another image.");
+    }
+  }
+
+  async function captureCameraFrame() {
+    const video = videoRef.current;
+    if (!video || !cameraOn || !video.videoWidth || !video.videoHeight) {
+      setCameraStatus("Turn on the camera and wait for the preview before capturing a picture.");
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.min(video.videoWidth, 1024);
+    canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
+    const context = canvas.getContext("2d");
+    if (!context) { setCameraStatus("Could not capture a camera frame."); return; }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setSelectedImage(canvas.toDataURL("image/jpeg", 0.82));
+    setSelectedImageName("Camera snapshot");
+    setCameraStatus("Snapshot captured locally. It will be analysed only when you send it.");
   }
 
   async function finishLesson() {
@@ -245,13 +316,27 @@ export default function LocalTutorPage() {
 
   async function processMessage(text: string) {
     const cleanText = text.trim();
-    if (!cleanText || loading) return;
+    if ((!cleanText && !selectedImage) || loading) return;
     setLoading(true);
-    setLines(current => [...current, { role: "you", text: cleanText }]);
+    setLines(current => [...current, { role: "you", text: cleanText || "Please help me describe this picture." }]);
     setPrompt("");
+    let learnerText = cleanText;
     try {
       const engine = await ensureModel();
-      const history = [...lines, { role: "you" as const, text: cleanText }];
+      if (selectedImage) {
+        setVisionBusy(true);
+        const vision = await ensureVisionModel();
+        const captionResult = await vision(selectedImage);
+        const caption = Array.isArray(captionResult)
+          ? String((captionResult[0] as { generated_text?: string })?.generated_text || "")
+          : String((captionResult as { generated_text?: string })?.generated_text || "");
+        if (!caption.trim()) throw new Error("The local picture model could not describe this image. Try another picture or continue by text.");
+        learnerText = (learnerText ? learnerText + "\n\n" : "") + "The learner shared a picture. The on-device image captioner describes it as: " + caption.trim() + ". Teach useful vocabulary from this scene and ask one relevant follow-up question.";
+        setSelectedImage("");
+        setSelectedImageName("");
+      }
+      setVisionBusy(false);
+      const history = [...lines, { role: "you" as const, text: learnerText || "Please help me describe this picture." }];
       const messages: ModelMessage[] = [
         {
           role: "system",
@@ -284,7 +369,7 @@ CONVERSATION RULES:
       const result = await engine.chat.completions.create({ messages, temperature: 0.7, max_tokens: 220 });
       const reply = String(result.choices?.[0]?.message?.content || "").trim();
       if (!reply) throw new Error("The local model returned an empty reply. Please try again.");
-      setLines(current => [...current, { role: "teacher", text: reply }]);
+      setLines(current => [...current, { role: "you", text: learnerText || "Please help me describe this picture." }, { role: "teacher", text: reply }]);
       if (voiceEnabled && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(reply);
@@ -304,6 +389,7 @@ CONVERSATION RULES:
       setStatus(message);
       setLines(current => [...current, { role: "teacher", text: `I couldn't answer just now: ${message}` }]);
     } finally {
+      setVisionBusy(false);
       setLoading(false);
     }
   }
@@ -392,6 +478,7 @@ CONVERSATION RULES:
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, paddingTop: 12 }}>
               <span role="status" style={{ color: "#c5d0c2", fontSize: 11, lineHeight: 1.4, flex: 1 }}>{cameraStatus}</span>
+              {cameraOn && <button type="button" onClick={captureCameraFrame} style={{ border: "1px solid #91a08f", borderRadius: 999, padding: "10px 13px", color: "white", background: "#536b58", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>Capture</button>}
               <button type="button" onClick={toggleCamera} style={{ border: "1px solid #657568", borderRadius: 999, padding: "10px 13px", color: "white", background: cameraOn ? "#5a4944" : "#536b58", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>{cameraOn ? "Turn camera off" : "Turn camera on"}</button>
             </div>
           </div>
@@ -410,11 +497,18 @@ CONVERSATION RULES:
           {lessonReview && <section aria-live="polite" style={{ margin: "14px 18px", padding: 18, borderRadius: 14, background: "#f4f5ef", border: "1px solid #e2e7dc" }}><h3 style={{ fontSize: 16, fontWeight: 650, margin: "0 0 10px" }}>Your lesson review</h3><p style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.7, color: "#44483f", margin: 0 }}>{lessonReview}</p></section>}
           <form onSubmit={sendMessage} style={{ borderTop: "1px solid #eeede6", padding: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
             <input value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Tell your teacher what you would like to talk about…" aria-label="Message to the local English tutor" style={{ minWidth: 0, flex: "1 1 220px", border: "1px solid #e2e1d9", borderRadius: 12, padding: "14px 15px", background: "#fff", color: "#252722", font: "inherit" }} />
-            <button type="button" onClick={startListening} aria-pressed={listening} style={{ border: "1px solid #deded5", borderRadius: 12, padding: "0 15px", minHeight: 48, background: listening ? "#e9eddf" : "#fff", color: "#343b2d", cursor: "pointer" }}>{listening ? "Stop listening" : "Speak"}</button>
-            <button type="submit" disabled={loading || !prompt.trim()} style={{ border: 0, borderRadius: 12, padding: "0 18px", minHeight: 48, background: "#343b2d", color: "white", cursor: "pointer", opacity: loading || !prompt.trim() ? .55 : 1 }}>Send</button>
+            <button type="button" onClick={() => void startListening()} aria-pressed={listening} disabled={transcribing || loading} style={{ border: "1px solid #deded5", borderRadius: 12, padding: "0 15px", minHeight: 48, background: listening ? "#e9eddf" : "#fff", color: "#343b2d", cursor: "pointer" }}>{listening ? "Stop listening" : transcribing ? "Transcribing…" : "Speak"}</button>
+            <button type="button" onClick={() => imageInputRef.current?.click()} disabled={loading || transcribing} style={{ border: "1px solid #deded5", borderRadius: 12, padding: "0 15px", minHeight: 48, background: "#fff", color: "#343b2d", cursor: "pointer" }}>Add picture</button>
+            <input ref={imageInputRef} type="file" accept="image/*" capture="environment" hidden onChange={event => { void choosePicture(event.target.files?.[0]); event.currentTarget.value = ""; }} aria-label="Choose a picture for local analysis" />
+            <button type="submit" disabled={loading || transcribing || (!prompt.trim() && !selectedImage)} style={{ border: 0, borderRadius: 12, padding: "0 18px", minHeight: 48, background: "#343b2d", color: "white", cursor: "pointer", opacity: loading || transcribing || (!prompt.trim() && !selectedImage) ? .55 : 1 }}>Send</button>
           </form>
+          {selectedImage && <div style={{ margin: "0 14px 14px", padding: 12, borderRadius: 12, background: "#f4f5ef", border: "1px solid #e2e7dc", display: "flex", alignItems: "center", gap: 12 }}>
+            <img src={selectedImage} alt="Selected image awaiting local analysis" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8 }} />
+            <div style={{ flex: 1, minWidth: 0 }}><p style={{ margin: 0, fontSize: 12, fontWeight: 600 }}>Picture ready</p><p style={{ margin: "3px 0 0", fontSize: 11, color: "#77796f", overflowWrap: "anywhere" }}>{selectedImageName} · analysed on this device</p></div>
+            <button type="button" onClick={() => { setSelectedImage(""); setSelectedImageName(""); }} style={{ border: 0, background: "transparent", fontSize: 12, textDecoration: "underline", cursor: "pointer" }}>Remove</button>
+          </div>}
         </section>
-        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Your tutor follows recent turns in this lesson. If you opt in, Courant also saves a short learning history and your latest lesson review in this browser so the next lesson can build on it. On-device AI needs a WebGPU-capable browser and sufficient device memory. Microphone recognition and system voices vary by device.</p>
+        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Your tutor follows recent turns in this lesson. If you opt in, recent lesson text and your latest review stay in this browser. Voice is transcribed with local Whisper; pictures are captioned locally before the text tutor responds. Raw recordings and pictures are not saved. Spoken replies use your device voices.</p>
       </div>
     </main>
   );
