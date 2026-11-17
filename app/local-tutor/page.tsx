@@ -29,7 +29,6 @@ export default function LocalTutorPage() {
   const [transcribing, setTranscribing] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
   const [selectedImageName, setSelectedImageName] = useState("");
-  const [visionBusy, setVisionBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("The local model has not been downloaded yet.");
   const [voiceEnabled, setVoiceEnabled] = useState(true);
@@ -290,6 +289,8 @@ export default function LocalTutorPage() {
     setLines([]);
     setLessonReview("");
     setPrompt("");
+    setSelectedImage("");
+    setSelectedImageName("");
     setStatus("New lesson ready. Tell your teacher what you would like to practise.");
   }
 
@@ -303,7 +304,6 @@ export default function LocalTutorPage() {
     try {
       const engine = await ensureModel();
       if (selectedImage) {
-        setVisionBusy(true);
         const vision = await ensureVisionModel();
         const captionResult = await vision(selectedImage);
         const caption = Array.isArray(captionResult)
@@ -314,7 +314,6 @@ export default function LocalTutorPage() {
         setSelectedImage("");
         setSelectedImageName("");
       }
-      setVisionBusy(false);
       setLines(current => {
         const next = [...current];
         const last = next[next.length - 1];
@@ -374,7 +373,6 @@ CONVERSATION RULES:
       setStatus(message);
       setLines(current => [...current, { role: "teacher", text: `I couldn't answer just now: ${message}` }]);
     } finally {
-      setVisionBusy(false);
       setLoading(false);
     }
   }
