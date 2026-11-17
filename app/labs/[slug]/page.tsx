@@ -245,7 +245,15 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
     } finally { setBusy(false); }
   }
 
-  async function startLesson() {\n    if (!chatEngine.current) {\n      const ready = await prepareModels();\n      if (!ready) return;\n    }\n    begin();\n  }\n\n  function begin() {
+  async function startLesson() {
+    if (!chatEngine.current) {
+      const ready = await prepareModels();
+      if (!ready) return;
+    }
+    begin();
+  }
+
+  function begin() {
     setHistory([{ role: "assistant", content: scenario.opening }]);
     setSaved(false);
     speak(scenario.opening);
