@@ -14,25 +14,6 @@ type LocalEngine = {
     };
   };
 };
-type SpeechResultEvent = Event & {
-  resultIndex: number;
-  results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
-};
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((event: Event) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-type SpeechWindow = Window & {
-  SpeechRecognition?: new () => SpeechRecognitionLike;
-  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-};
-
 const pageStyle = {
   background: "#f7f6f2",
   color: "#252722",
@@ -66,7 +47,6 @@ export default function LocalTutorPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const engineRef = useRef<LocalEngine | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const speechPipelineRef = useRef<LocalPipeline | null>(null);
@@ -110,7 +90,6 @@ export default function LocalTutorPage() {
   }, [memoryLoaded, rememberProgress, lines, savedLearningContext, level, lessonGoal, lessonMode]);
 
   useEffect(() => () => {
-    recognitionRef.current?.stop();
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     streamRef.current?.getTracks().forEach(track => track.stop());
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -137,7 +116,7 @@ export default function LocalTutorPage() {
         await videoRef.current.play().catch(() => undefined);
       }
       setCameraOn(true);
-      setCameraStatus("Your camera preview stays on this device. The local tutor does not analyse video.");
+      setCameraStatus("Your camera preview stays on this device. Capture a frame when you want Courant to describe it locally.");
       stream.getVideoTracks().forEach(track => {
         track.onended = () => {
           setCameraOn(false);
@@ -336,6 +315,12 @@ export default function LocalTutorPage() {
         setSelectedImageName("");
       }
       setVisionBusy(false);
+      setLines(current => {
+        const next = [...current];
+        const last = next[next.length - 1];
+        if (last?.role === "you") next[next.length - 1] = { role: "you", text: learnerText || "Please help me describe this picture." };
+        return next;
+      });
       const history = [...lines, { role: "you" as const, text: learnerText || "Please help me describe this picture." }];
       const messages: ModelMessage[] = [
         {
@@ -446,7 +431,7 @@ CONVERSATION RULES:
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={rememberProgress} onChange={event => setRememberProgress(event.target.checked)} /> Remember my progress on this device</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model is larger and needs a capable WebGPU device and more memory. It downloads on first use, then runs on-device. Speech recognition depends on browser support; spoken replies use your device's installed voices. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model is larger and needs a capable WebGPU device and more memory. It downloads on first use, then runs on-device. Speech transcription uses local Whisper after its first model download; spoken replies use your device's installed voices. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
