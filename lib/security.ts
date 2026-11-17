@@ -2,10 +2,23 @@ import { createSupabaseServerClient } from "@/lib/auth";
 import { createRateLimitKey } from "@/lib/rate-limit-key";
 
 export function isSameOrigin(request: Request): boolean {
+  const requestUrl = new URL(request.url);
   const origin = request.headers.get("origin");
   if (origin) {
-    try { return new URL(origin).origin === new URL(request.url).origin; }
-    catch { return false; }
+    try {
+      const suppliedOrigin = new URL(origin).origin;
+      const acceptedOrigins = new Set([requestUrl.origin]);
+      // Render and other reverse proxies may expose an internal origin in request.url.
+      // Compare against the public forwarded host/protocol as well, without accepting
+      // an arbitrary Origin supplied by the browser.
+      const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+      const host = forwardedHost || request.headers.get("host");
+      const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+      if (host) acceptedOrigins.add(`${forwardedProto || requestUrl.protocol.replace(":", "")}://${host}`);
+      return acceptedOrigins.has(suppliedOrigin);
+    } catch {
+      return false;
+    }
   }
   return request.headers.get("sec-fetch-site") !== "cross-site";
 }
