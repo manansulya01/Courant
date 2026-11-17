@@ -247,7 +247,7 @@ export default function LocalTutorPage() {
             </label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The compact model downloads once (about 376 MB) and then runs on-device with WebGPU. Speech recognition depends on browser support and may use the browser provider; spoken replies use your device's installed voices.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The compact model downloads on first use; its estimated GPU-memory requirement is about 376 MB. It then runs on-device with WebGPU. Speech recognition depends on browser support and may use the browser provider; spoken replies use your device's installed voices.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
