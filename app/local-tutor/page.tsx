@@ -179,12 +179,18 @@ export default function LocalTutorPage() {
       const resultEvent = event as SpeechResultEvent;
       let transcript = "";
       for (let index = resultEvent.resultIndex; index < resultEvent.results.length; index += 1) {
-        transcript += resultEvent.results[index][0].transcript;
+        const result = resultEvent.results[index];
+        if (result.isFinal) transcript += result[0].transcript;
       }
-      if (transcript.trim()) setPrompt(transcript.trim());
+      const finalText = transcript.trim();
+      if (finalText) {
+        setPrompt(finalText);
+        recognition.stop();
+        void processMessage(finalText);
+      }
     };
     recognition.onerror = () => {
-      setStatus("Microphone speech recognition stopped. Check browser permission or type your message instead.");
+      setStatus("Microphone speech recognition stopped. If your speech was recognised, Courant will respond; otherwise check microphone permission and try again.");
       setListening(false);
     };
     recognition.onend = () => {
@@ -195,7 +201,7 @@ export default function LocalTutorPage() {
     try {
       recognition.start();
       setListening(true);
-      setStatus("Listening… speak naturally in English.");
+      setStatus("Listening… when you finish speaking, Courant will automatically send your words and reply.");
     } catch {
       setListening(false);
       setStatus("The microphone could not start. Check browser permission and try again.");
@@ -237,16 +243,15 @@ export default function LocalTutorPage() {
     setStatus("New lesson ready. Tell your teacher what you would like to practise.");
   }
 
-  async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const text = prompt.trim();
-    if (!text || loading) return;
+  async function processMessage(text: string) {
+    const cleanText = text.trim();
+    if (!cleanText || loading) return;
     setLoading(true);
-    setLines(current => [...current, { role: "you", text }]);
+    setLines(current => [...current, { role: "you", text: cleanText }]);
     setPrompt("");
     try {
       const engine = await ensureModel();
-      const history = [...lines, { role: "you" as const, text }];
+      const history = [...lines, { role: "you" as const, text: cleanText }];
       const messages: ModelMessage[] = [
         {
           role: "system",
@@ -274,7 +279,7 @@ export default function LocalTutorPage() {
       } else {
         setSpeaking(false);
       }
-      setStatus("Ready — your conversation stays in this page unless you choose to share it.");
+      setStatus("Your teacher has replied. Speak again or type your next answer.");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "The local tutor could not respond.";
       setStatus(message);
@@ -282,6 +287,12 @@ export default function LocalTutorPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+
+  async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await processMessage(prompt);
   }
 
   return (
