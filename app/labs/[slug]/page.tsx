@@ -44,7 +44,6 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
   const [modelProgress, setModelProgress] = useState(0);
   const [modelStatus, setModelStatus] = useState("Models download once, then run on this device.");
   const [modelsReady, setModelsReady] = useState(false);
-  const [imageBusy, setImageBusy] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
@@ -52,12 +51,10 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
   const chatEngine = useRef<LocalChatEngine | null>(null);
   const visionPipeline = useRef<LocalPipeline | null>(null);
   const speechPipeline = useRef<LocalPipeline | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
 
   useEffect(() => () => {
     if (recorder.current?.state === "recording") recorder.current.stop();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
   }, []);
 
   async function ensureChatModel() {
@@ -100,10 +97,12 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       await ensureChatModel();
       setModelsReady(true);
       setNotice("Your local English teacher is ready. Start the lesson whenever you are.");
+      return true;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "The local language model could not load.";
       setError(message);
       setModelStatus("Model setup needs attention. Try a recent WebGPU-capable Chrome or Edge browser.");
+      return false;
     } finally { setBusy(false); }
   }
 
@@ -134,7 +133,6 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       const engine = await ensureChatModel();
       let learnerMessage = text;
       if (image) {
-        setImageBusy(true);
         const captioner = await ensureVisionModel();
         const captionResult = await captioner(image);
         const caption = Array.isArray(captionResult)
@@ -142,7 +140,6 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
           : String((captionResult as { generated_text?: string })?.generated_text || "");
         if (!caption.trim()) throw new Error("The local picture model could not describe that image. Try another picture or continue by text.");
         learnerMessage = (text ? text + "\n\n" : "") + "The learner shared a picture. The on-device image model describes it as: " + caption.trim() + ". Use this description to teach useful vocabulary and ask one relevant follow-up question.";
-        setImageBusy(false);
       }
       const userTurn: ChatTurn = { role: "user", content: learnerMessage || "Let's continue our lesson." };
       const messages = [
@@ -160,7 +157,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The local tutor could not reply.");
       setNotice("Ready when you are.");
-    } finally { setBusy(false); setImageBusy(false); }
+    } finally { setBusy(false); }
   }
 
   async function startRecording() {
@@ -178,9 +175,10 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       media.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
         setRecording(false); setVoiceBusy(true); setBusy(true); setNotice("Transcribing on your device…");
+        let audioContext: AudioContext | null = null;
         try {
           const blob = new Blob(chunks.current, { type: media.mimeType || "audio/webm" });
-          const audioContext = new AudioContext();
+          audioContext = new AudioContext();
           const decoded = await audioContext.decodeAudioData(await blob.arrayBuffer());
           const frameCount = Math.ceil(decoded.duration * 16000);
           const offline = new OfflineAudioContext(1, frameCount, 16000);
@@ -191,7 +189,6 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
           const resampled = await offline.startRendering();
           const transcriber = await ensureSpeechModel();
           const result = await transcriber(resampled.getChannelData(0));
-          await audioContext.close();
           const transcript = typeof result === "object" && result !== null && "text" in result ? String((result as { text: unknown }).text).trim() : "";
           if (!transcript) throw new Error("I couldn't recognise any words. Try speaking a little closer to the microphone.");
           setDraft(transcript);
@@ -199,7 +196,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : "Local speech recognition failed. You can type your answer instead.");
           setNotice("Ready when you are.");
-        } finally { setVoiceBusy(false); setBusy(false); }
+        } finally { if (audioContext && audioContext.state !== "closed") await audioContext.close().catch(() => undefined); setVoiceBusy(false); setBusy(false); }
       };
       recorder.current = media;
       media.start();
@@ -248,7 +245,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
     } finally { setBusy(false); }
   }
 
-  function begin() {
+  async function startLesson() {\n    if (!chatEngine.current) {\n      const ready = await prepareModels();\n      if (!ready) return;\n    }\n    begin();\n  }\n\n  function begin() {
     setHistory([{ role: "assistant", content: scenario.opening }]);
     setSaved(false);
     speak(scenario.opening);
@@ -293,7 +290,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
           <p className="mt-2 text-[10px] text-[var(--muted)]">Text teacher: Qwen 2.5 1.5B · Speech: Whisper Tiny English · Pictures: ViT-GPT2 · Voice: device speech synthesis</p>
         </div>
         <div className="flex-1 space-y-3 py-4">
-          {!history.length ? <div className="grid min-h-[230px] place-items-center text-center"><div className="max-w-sm"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[var(--line)] text-xl text-[var(--accent)]">c.</div><h2 className="mt-5 text-xl font-medium tracking-[-.03em]">Let's learn by talking.</h2><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Prepare the local teacher, then start a guided lesson. No cloud AI key is needed.</p><button type="button" onClick={() => { if (!modelsReady) void prepareModels().then(() => begin()); else begin(); }} disabled={busy} className="mt-5 rounded-full bg-[var(--accent)] px-5 py-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50">Start this lesson →</button></div></div> : history.map((turn, index) => <div key={index} className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 ${turn.role === "user" ? "ml-auto bg-[var(--accent-soft)]" : "border border-[var(--line)] bg-white"}`}><p className="mb-1 text-[9px] font-bold uppercase tracking-[.14em] text-[var(--muted)]">{turn.role === "user" ? "You" : "Courant"}</p>{turn.content}</div>)}
+          {!history.length ? <div className="grid min-h-[230px] place-items-center text-center"><div className="max-w-sm"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[var(--line)] text-xl text-[var(--accent)]">c.</div><h2 className="mt-5 text-xl font-medium tracking-[-.03em]">Let's learn by talking.</h2><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Prepare the local teacher, then start a guided lesson. No cloud AI key is needed.</p><button type="button" onClick={() => void startLesson()} disabled={busy} className="mt-5 rounded-full bg-[var(--accent)] px-5 py-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50">Start this lesson →</button></div></div> : history.map((turn, index) => <div key={index} className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 ${turn.role === "user" ? "ml-auto bg-[var(--accent-soft)]" : "border border-[var(--line)] bg-white"}`}><p className="mb-1 text-[9px] font-bold uppercase tracking-[.14em] text-[var(--muted)]">{turn.role === "user" ? "You" : "Courant"}</p>{turn.content}</div>)}
           {image && <div className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs">Picture ready: {imageName}<button type="button" onClick={() => { setImage(""); setImageName(""); }} className="ml-3 underline">Remove</button><img src={image} alt="Image selected for local captioning" className="mt-3 max-h-44 rounded-lg object-contain"/></div>}
         </div>
         <p aria-live="polite" className="mb-3 text-[11px] text-[var(--muted)]">{notice}</p>
