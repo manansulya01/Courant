@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 const navigation = [
   { label: "Overview", href: "/dashboard", number: "01" },
   { label: "Practice room", href: "/labs", number: "02" },
-  { label: "Talk in English", href: "/talk", number: "03" },
+  { label: "AI teacher", href: "/local-tutor", number: "03" },
   { label: "Practice plan", href: "/practice-plan", number: "04" },
   { label: "My progress", href: "/dashboard#progress", number: "05" },
   { label: "Creator Studio", href: "/creator", number: "06" },
@@ -31,7 +31,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {navigation.map(item => {
           const active = pathname === item.href ||
             (item.href === "/labs" && pathname.startsWith("/labs")) ||
-            (item.href === "/talk" && pathname === "/talk") ||
+            (item.href === "/local-tutor" && pathname === "/local-tutor") ||
             (item.href === "/creator" && pathname === "/creator") ||
             (item.href === "/practice-plan" && pathname === "/practice-plan") ||
             (item.href === "/dashboard" && pathname === "/dashboard") ||
