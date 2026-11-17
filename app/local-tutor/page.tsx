@@ -48,6 +48,8 @@ export default function LocalTutorPage() {
   const [status, setStatus] = useState("The local model has not been downloaded yet.");
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [level, setLevel] = useState("intermediate");
+  const [lessonMode, setLessonMode] = useState("conversation");
+  const [lessonGoal, setLessonGoal] = useState("Speak more naturally and confidently in everyday English.");
   const [speaking, setSpeaking] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraStatus, setCameraStatus] = useState("Camera is off. Turn it on for a private self-preview.");
@@ -103,7 +105,7 @@ export default function LocalTutorPage() {
     }
     setStatus("Preparing the local model. The first download may take a few minutes…");
     const webllm = await import("@mlc-ai/web-llm");
-    const engine = await webllm.CreateMLCEngine("SmolLM2-360M-Instruct-q4f16_1-MLC", {
+    const engine = await webllm.CreateMLCEngine("Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
       initProgressCallback: (report: { progress?: number; text?: string }) => {
         setProgress(Math.round(Math.max(0, Math.min(1, report.progress ?? 0)) * 100));
         setStatus(report.text || "Downloading model weights…");
@@ -172,7 +174,7 @@ export default function LocalTutorPage() {
       const messages: ModelMessage[] = [
         {
           role: "system",
-          content: `You are Courant, a kind, natural English conversation teacher. The learner's level is ${level}. Reply in clear, concise English. If the learner makes a meaningful mistake, gently show a natural corrected version and give one short explanation. Continue the conversation with one relevant question. Be encouraging, not robotic. Do not claim to have heard audio or seen video.`,
+          content: `You are Courant, the learner's dedicated one-to-one English tutor. This is a private lesson, not a generic chatbot. Learner level: ${level}. Lesson format: ${lessonMode}. Learner's goal: ${lessonGoal}. Lead the lesson actively: ask only ONE question at a time, respond to the meaning of the learner's answer, and choose the next question based on what they said. Keep the conversation warm, natural and age-appropriate. Correct important errors gently using a short natural correction and one brief reason; do not interrupt every sentence to correct tiny errors. Help the learner express their own ideas. For role-play, stay in character and make the scenario realistic. For grammar, explain briefly then ask the learner to make their own example. For pronunciation, give a short phrase to say and explain stress or sounds; do not claim to evaluate audio you cannot access. For conversation, keep a genuine back-and-forth going. Track strengths and recurring mistakes within this conversation. End with one clear next step or one follow-up question. Do not claim to have heard audio or seen video.`,
         },
         ...history.slice(-12).map(line => ({
           role: line.role === "you" ? "user" as const : "assistant" as const,
@@ -224,8 +226,8 @@ export default function LocalTutorPage() {
         <a href="/" style={{ color: "#676a60", textDecoration: "none", fontSize: 14 }}>← Courant</a>
         <header style={{ margin: "40px 0 28px" }}>
           <p style={{ color: "#6b725d", letterSpacing: ".12em", textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>Private practice · on-device AI</p>
-          <h1 style={{ fontSize: "clamp(34px, 6vw, 54px)", letterSpacing: "-.045em", lineHeight: 1.05, fontWeight: 600, margin: "12px 0" }}>A little practice goes a long way.</h1>
-          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Practise with a lightweight language model running on your device, a simple animated teacher, and optional camera self-preview. Speak or type naturally. No AI API key, subscription, or avatar service is required.</p>
+          <h1 style={{ fontSize: "clamp(34px, 6vw, 54px)", letterSpacing: "-.045em", lineHeight: 1.05, fontWeight: 600, margin: "12px 0" }}>Your own English teacher, one lesson at a time.</h1>
+          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Have a private one-to-one English lesson with a tutor that guides the conversation, adapts to your level, corrects useful mistakes and follows your learning goal. Speak or type naturally.</p>
         </header>
 
         <section style={{ background: "#fff", border: "1px solid #e8e7df", borderRadius: 20, padding: 22, marginBottom: 18 }}>
@@ -239,7 +241,11 @@ export default function LocalTutorPage() {
           <div aria-label={`Model download progress ${progress}%`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} style={{ height: 5, background: "#efeee8", borderRadius: 99, overflow: "hidden", marginTop: 18 }}>
             <div style={{ width: `${progress}%`, height: "100%", background: "#87916f", transition: "width .2s" }} />
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center", marginTop: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 12, marginTop: 18 }}>
+            <label style={{ fontSize: 13, color: "#55584f" }}>Lesson style<select value={lessonMode} onChange={event => setLessonMode(event.target.value)} style={{ display: "block", marginTop: 7, width: "100%", border: "1px solid #deded5", borderRadius: 8, padding: "10px", background: "#fff" }}><option value="conversation">Natural conversation</option><option value="roleplay">Real-life role-play</option><option value="grammar">Grammar coaching</option><option value="pronunciation">Pronunciation practice</option></select></label>
+            <label style={{ fontSize: 13, color: "#55584f" }}>What do you want to improve?<input value={lessonGoal} onChange={event => setLessonGoal(event.target.value)} maxLength={240} style={{ display: "block", marginTop: 7, width: "100%", border: "1px solid #deded5", borderRadius: 8, padding: "10px", background: "#fff" }} /></label>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center", marginTop: 14 }}>
             <label style={{ fontSize: 14, color: "#55584f" }}>Your level
               <select value={level} onChange={event => setLevel(event.target.value)} style={{ marginLeft: 8, border: "1px solid #deded5", borderRadius: 8, padding: "8px 10px", background: "#fff" }}>
                 <option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option>
@@ -247,7 +253,7 @@ export default function LocalTutorPage() {
             </label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The compact model downloads on first use; its estimated GPU-memory requirement is about 376 MB. It then runs on-device with WebGPU. Speech recognition depends on browser support and may use the browser provider; spoken replies use your device's installed voices.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model is larger and needs a capable WebGPU device and more memory. It downloads on first use, then runs on-device. Speech recognition depends on browser support; spoken replies use your device's installed voices.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
@@ -286,17 +292,17 @@ export default function LocalTutorPage() {
 
         <section style={{ background: "#fff", border: "1px solid #e8e7df", borderRadius: 20, overflow: "hidden" }}>
           <div aria-live="polite" style={{ minHeight: 280, maxHeight: "50vh", overflowY: "auto", padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
-            {lines.length === 0 && <div style={{ margin: "auto", maxWidth: 420, textAlign: "center", padding: "40px 0" }}><div aria-hidden="true" style={{ fontSize: 28, marginBottom: 10 }}>✳</div><h2 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 8px" }}>What would you like to practise?</h2><p style={{ color: "#77796f", lineHeight: 1.6, margin: 0 }}>Try “Help me practise introducing myself at a new school.”</p></div>}
+            {lines.length === 0 && <div style={{ margin: "auto", maxWidth: 420, textAlign: "center", padding: "40px 0" }}><div aria-hidden="true" style={{ fontSize: 28, marginBottom: 10 }}>✳</div><h2 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 8px" }}>What would you like to practise?</h2><p style={{ color: "#77796f", lineHeight: 1.6, margin: 0 }}>Start with “I want to speak more confidently. Can we talk about my day?”</p></div>}
             {lines.map((line, index) => <div key={index} style={{ alignSelf: line.role === "you" ? "flex-end" : "flex-start", maxWidth: "88%", borderRadius: 16, padding: "12px 15px", background: line.role === "you" ? "#e9eddf" : "#f5f4ef", lineHeight: 1.65, whiteSpace: "pre-wrap" }}><div style={{ fontSize: 11, color: "#77796f", marginBottom: 4 }}>{line.role === "you" ? "YOU" : "COURANT · LOCAL TUTOR"}</div>{line.text}</div>)}
             {loading && <p style={{ color: "#77796f", fontSize: 14 }}>Thinking on your device…</p>}
           </div>
           <form onSubmit={sendMessage} style={{ borderTop: "1px solid #eeede6", padding: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <input value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Write or dictate something in English…" aria-label="Message to the local English tutor" style={{ minWidth: 0, flex: "1 1 220px", border: "1px solid #e2e1d9", borderRadius: 12, padding: "14px 15px", background: "#fff", color: "#252722", font: "inherit" }} />
+            <input value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Tell your teacher what you would like to talk about…" aria-label="Message to the local English tutor" style={{ minWidth: 0, flex: "1 1 220px", border: "1px solid #e2e1d9", borderRadius: 12, padding: "14px 15px", background: "#fff", color: "#252722", font: "inherit" }} />
             <button type="button" onClick={startListening} aria-pressed={listening} style={{ border: "1px solid #deded5", borderRadius: 12, padding: "0 15px", minHeight: 48, background: listening ? "#e9eddf" : "#fff", color: "#343b2d", cursor: "pointer" }}>{listening ? "Stop listening" : "Speak"}</button>
             <button type="submit" disabled={loading || !prompt.trim()} style={{ border: 0, borderRadius: 12, padding: "0 18px", minHeight: 48, background: "#343b2d", color: "white", cursor: "pointer", opacity: loading || !prompt.trim() ? .55 : 1 }}>Send</button>
           </form>
         </section>
-        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>The local teacher is designed to work without paid AI services. The animated teacher is a lightweight 2D companion, not a photorealistic avatar; the camera is a private self-preview and is not analysed. On-device AI requires a WebGPU-capable browser. Microphone recognition and system voices vary by device.</p>
+        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Your tutor follows the recent turns in this lesson while this page stays open. On-device AI needs a WebGPU-capable browser and sufficient device memory. Microphone recognition and system voices vary by device.</p>
       </div>
     </main>
   );
