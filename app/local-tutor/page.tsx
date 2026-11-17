@@ -53,6 +53,8 @@ export default function LocalTutorPage() {
   const [speaking, setSpeaking] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraStatus, setCameraStatus] = useState("Camera is off. Turn it on for a private self-preview.");
+  const [lessonReview, setLessonReview] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const engineRef = useRef<LocalEngine | null>(null);
@@ -159,6 +161,40 @@ export default function LocalTutorPage() {
       setListening(false);
       setStatus("The microphone could not start. Check browser permission and try again.");
     }
+  }
+
+  async function finishLesson() {
+    if (!lines.length || reviewLoading || loading) return;
+    setReviewLoading(true);
+    setLessonReview("");
+    try {
+      const engine = await ensureModel();
+      const transcript = lines.map(line => `${line.role === "you" ? "Learner" : "Teacher"}: ${line.text}`).join("\\n").slice(-9000);
+      const result = await engine.chat.completions.create({
+        messages: [
+          { role: "system", content: "You are an expert, encouraging English teacher. Review this one-to-one lesson transcript. Give a concise learner-friendly lesson report with: 1) what the learner did well, 2) up to three useful corrections with natural alternatives, 3) two vocabulary or expression upgrades, 4) one specific practice task for next time. Be accurate and never invent mistakes. Use clear headings and plain text." },
+          { role: "user", content: `Learner level: ${level}. Goal: ${lessonGoal}. Lesson style: ${lessonMode}. Transcript:\\n${transcript}` }
+        ],
+        temperature: 0.3,
+        max_tokens: 320
+      });
+      const review = String(result.choices?.[0]?.message?.content || "").trim();
+      if (!review) throw new Error("The lesson review was empty. Please try again.");
+      setLessonReview(review);
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : "Could not create lesson review.");
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  function startNewLesson() {
+    if (loading || reviewLoading) return;
+    window.speechSynthesis?.cancel();
+    setLines([]);
+    setLessonReview("");
+    setPrompt("");
+    setStatus("New lesson ready. Tell your teacher what you would like to practise.");
   }
 
   async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
@@ -296,6 +332,11 @@ export default function LocalTutorPage() {
             {lines.map((line, index) => <div key={index} style={{ alignSelf: line.role === "you" ? "flex-end" : "flex-start", maxWidth: "88%", borderRadius: 16, padding: "12px 15px", background: line.role === "you" ? "#e9eddf" : "#f5f4ef", lineHeight: 1.65, whiteSpace: "pre-wrap" }}><div style={{ fontSize: 11, color: "#77796f", marginBottom: 4 }}>{line.role === "you" ? "YOU" : "COURANT · LOCAL TUTOR"}</div>{line.text}</div>)}
             {loading && <p style={{ color: "#77796f", fontSize: 14 }}>Thinking on your device…</p>}
           </div>
+          {lines.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, padding: "14px 18px 0" }}>
+            <button type="button" onClick={startNewLesson} disabled={loading || reviewLoading} style={{ border: "1px solid #deded5", borderRadius: 999, padding: "9px 14px", background: "#fff", color: "#55584f", fontSize: 12, cursor: "pointer" }}>Start a new lesson</button>
+            <button type="button" onClick={finishLesson} disabled={loading || reviewLoading} style={{ border: 0, borderRadius: 999, padding: "9px 14px", background: "#e9eddf", color: "#343b2d", fontSize: 12, cursor: "pointer", opacity: loading || reviewLoading ? .6 : 1 }}>{reviewLoading ? "Preparing your lesson review…" : "Finish lesson & get feedback"}</button>
+          </div>}
+          {lessonReview && <section aria-live="polite" style={{ margin: "14px 18px", padding: 18, borderRadius: 14, background: "#f4f5ef", border: "1px solid #e2e7dc" }}><h3 style={{ fontSize: 16, fontWeight: 650, margin: "0 0 10px" }}>Your lesson review</h3><p style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.7, color: "#44483f", margin: 0 }}>{lessonReview}</p></section>}
           <form onSubmit={sendMessage} style={{ borderTop: "1px solid #eeede6", padding: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
             <input value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Tell your teacher what you would like to talk about…" aria-label="Message to the local English tutor" style={{ minWidth: 0, flex: "1 1 220px", border: "1px solid #e2e1d9", borderRadius: 12, padding: "14px 15px", background: "#fff", color: "#252722", font: "inherit" }} />
             <button type="button" onClick={startListening} aria-pressed={listening} style={{ border: "1px solid #deded5", borderRadius: 12, padding: "0 15px", minHeight: 48, background: listening ? "#e9eddf" : "#fff", color: "#343b2d", cursor: "pointer" }}>{listening ? "Stop listening" : "Speak"}</button>
