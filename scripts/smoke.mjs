@@ -34,7 +34,7 @@ for (const path of [
 ]) await check(path, 200);
 const localTutor = await check("/local-tutor", 200);
 const localTutorHtml = await localTutor.text();
-if (!localTutorHtml.includes("COURANT · LOCAL TEACHER") || !localTutorHtml.includes("not analysed by the local model")) throw new Error("Local teacher preview or camera privacy disclosure is missing.");
+if (!localTutorHtml.includes("COURANT · LOCAL TEACHER") || !localTutorHtml.includes("local Whisper") || !localTutorHtml.includes("Add picture")) throw new Error("Local teacher preview, local speech transcription, or local picture input is missing.");
 const classroom = await check("/offline-classroom", 200);
 const classroomHtml = await classroom.text();
 if (!classroomHtml.includes("Create an assignment") || !classroomHtml.includes("Complete an assignment") || !classroomHtml.includes("Assignment file")) throw new Error("Offline classroom workflow is incomplete.");
