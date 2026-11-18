@@ -140,18 +140,36 @@ export default function LocalTutorPage() {
     if (!(typeof navigator !== "undefined" && "gpu" in navigator)) {
       throw new Error("This browser does not support WebGPU, which is required for private on-device AI. Try a recent Chrome or Edge browser on a supported device, or use text practice lessons instead.");
     }
-    setStatus("Preparing the local model. The first download may take a few minutes…");
+    setStatus("Preparing Courant's upgraded local model. The first download may take a few minutes…");
     const webllm = await import("@mlc-ai/web-llm");
-    const engine = await webllm.CreateMLCEngine("Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
-      initProgressCallback: (report: { progress?: number; text?: string }) => {
-        setProgress(Math.round(Math.max(0, Math.min(1, report.progress ?? 0)) * 100));
-        setStatus(report.text || "Downloading model weights…");
-      },
-    });
+    const onProgress = (report: { progress?: number; text?: string }) => {
+      setProgress(Math.round(Math.max(0, Math.min(1, report.progress ?? 0)) * 100));
+      setStatus(report.text || "Downloading model weights…");
+    };
+    let engine;
+    try {
+      // The 3B instruction-tuned model gives the tutor substantially more
+      // capacity for context, corrections and natural dialogue than the old 1.5B.
+      engine = await webllm.CreateMLCEngine("Qwen2.5-3B-Instruct-q4f16_1-MLC", {
+        initProgressCallback: onProgress,
+      });
+      setStatus("Loaded the upgraded 3B tutor — running privately on this device.");
+    } catch (upgradeError) {
+      // Keep the tutor usable on lower-memory GPUs and older supported devices.
+      setProgress(0);
+      setStatus("This device could not load the larger model. Trying the lighter tutor…");
+      try {
+        engine = await webllm.CreateMLCEngine("Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
+          initProgressCallback: onProgress,
+        });
+        setStatus("Loaded the compatible 1.5B tutor on this device.");
+      } catch {
+        throw upgradeError;
+      }
+    }
     engineRef.current = engine as LocalEngine;
     setReady(true);
     setProgress(100);
-    setStatus("Ready — replies are generated on this device.");
     return engineRef.current;
   }
 
@@ -348,7 +366,7 @@ export default function LocalTutorPage() {
           { role: "user", content: `Learner level: ${level}. Goal: ${lessonGoal}. Lesson style: ${lessonMode}. Transcript:\n${transcript}` }
         ],
         temperature: 0.3,
-        max_tokens: 320
+        max_tokens: 420
       });
       const review = String((result as { choices?: Array<{ message?: { content?: string | null } }> }).choices?.[0]?.message?.content || "").trim();
       if (!review) throw new Error("The lesson review was empty. Please try again.");
@@ -491,7 +509,7 @@ CONVERSATION RULES:
           content: line.text,
         })),
       ];
-      const response = await engine.chat.completions.create({ messages, temperature: 0.55, max_tokens: 160, stream: true });
+      const response = await engine.chat.completions.create({ messages, temperature: 0.55, max_tokens: 220, stream: true });
       let reply = "";
       if (Symbol.asyncIterator in Object(response)) {
         for await (const chunk of response as AsyncIterable<LocalChunk>) {
@@ -647,7 +665,7 @@ CONVERSATION RULES:
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={rememberProgress} onChange={event => setRememberProgress(event.target.checked)} /> Remember my progress on this device</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model needs a capable WebGPU device and downloads once. Replies stream as they are generated, with shorter answers for quicker turns. Voice call mode uses local Whisper and your device voice; it listens after each reply. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The upgraded 3B tutor needs a capable WebGPU device and downloads once (about 2.4 GB of model memory); lower-memory devices automatically fall back to the 1.5B model. Replies stream as they are generated, with shorter answers for quicker turns. Voice call mode uses local Whisper and your device voice; it listens after each reply. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
