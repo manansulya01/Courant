@@ -492,7 +492,9 @@ CONVERSATION RULES:
         @keyframes courant-avatar-blink { 0%,45%,48%,100% { transform: scaleY(1); } 46.5%,47.5% { transform: scaleY(.12); } }
         @keyframes courant-avatar-mouth { 0%,100% { transform: scaleY(.55); } 50% { transform: scaleY(1.18); } }
         @keyframes courant-avatar-glow { 0%,100% { opacity: .25; transform: scale(.96); } 50% { opacity: .55; transform: scale(1.04); } }
-        .courant-avatar-art { animation: courant-avatar-float 4.5s ease-in-out infinite; transform-origin: 50% 90%; }\n        .courant-avatar-speaking .courant-avatar-art { filter: drop-shadow(0 7px 12px rgba(78,103,75,.12)); }\n        .courant-avatar-speaking { animation-duration: 3.2s; }
+        .courant-avatar-art { animation: courant-avatar-float 4.5s ease-in-out infinite; transform-origin: 50% 90%; }
+        .courant-avatar-speaking .courant-avatar-art { filter: drop-shadow(0 7px 12px rgba(78,103,75,.12)); }
+        .courant-avatar-speaking { animation-duration: 3.2s; }
         .courant-avatar-eye { transform-box: fill-box; transform-origin: center; animation: courant-avatar-blink 5.2s ease-in-out infinite; }
         .courant-avatar-mouth { transform-box: fill-box; transform-origin: center; }
         .courant-avatar-speaking .courant-avatar-mouth { animation: courant-avatar-mouth .28s ease-in-out infinite alternate; }
