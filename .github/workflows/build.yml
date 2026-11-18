@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm install --no-audit --no-fund --onnxruntime-node-install-cuda=skip
       - name: Audit production dependencies (blocking)
         run: npm audit --omit=dev --audit-level=high
       - name: Report development dependency advisories
