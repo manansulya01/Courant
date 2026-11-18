@@ -321,7 +321,7 @@ export default function LocalTutorPage() {
         temperature: 0.3,
         max_tokens: 320
       });
-      const review = String(result.choices?.[0]?.message?.content || "").trim();
+      const review = String((result as { choices?: Array<{ message?: { content?: string | null } }> }).choices?.[0]?.message?.content || "").trim();
       if (!review) throw new Error("The lesson review was empty. Please try again.");
       setLessonReview(review);
       setSavedLearningContext(review);
@@ -416,7 +416,7 @@ CONVERSATION RULES:
           });
         }
       } else {
-        reply = String(response.choices?.[0]?.message?.content || "");
+        reply = String((response as { choices?: Array<{ message?: { content?: string | null } }> }).choices?.[0]?.message?.content || "");
       }
       reply = reply.trim();
       if (!reply) throw new Error("The local model returned an empty reply. Please try again.");
