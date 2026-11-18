@@ -476,8 +476,9 @@ CONVERSATION RULES:
     }
     voiceCallRef.current = true;
     setVoiceCall(true);
-    setStatus("Voice call starting. Speak naturally after the microphone activates.");
-    await startListening();
+    setStatus("Connecting your private lesson…");
+    await processMessage("Start our one-to-one English lesson. Greet me naturally, introduce today’s small speaking goal, and ask me one simple opening question. Speak directly to me as my teacher.");
+    if (voiceCallRef.current) await startListening();
   }
 
   async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
@@ -488,6 +489,11 @@ CONVERSATION RULES:
   return (
     <main style={{ ...pageStyle, minHeight: "100vh", padding: "clamp(20px, 5vw, 64px)" }}>
       <style>{`
+        @keyframes courant-call-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+        @keyframes courant-call-wave { 0%,100% { transform: scaleY(.45); opacity: .55; } 50% { transform: scaleY(1); opacity: 1; } }
+        .courant-call-speaking { animation: courant-call-pulse 1.8s ease-in-out infinite; }
+        .courant-call-wave { width: 4px; border-radius: 8px; background: #c4d5bd; transform-origin: center; animation: courant-call-wave .65s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .courant-call-speaking,.courant-call-wave { animation: none !important; } }
         @keyframes courant-avatar-float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-5px) rotate(-.5deg); } }
         @keyframes courant-avatar-blink { 0%,45%,48%,100% { transform: scaleY(1); } 46.5%,47.5% { transform: scaleY(.12); } }
         @keyframes courant-avatar-mouth { 0%,100% { transform: scaleY(.55); } 50% { transform: scaleY(1.18); } }
@@ -612,6 +618,29 @@ CONVERSATION RULES:
         </section>
         <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Your tutor follows recent turns in this lesson. If you opt in, recent lesson text and your latest review stay in this browser. Voice is transcribed with local Whisper; pictures are captioned locally before the text tutor responds. Raw recordings and pictures are not saved. Spoken replies use your device voices.</p>
       </div>
+      {voiceCall && <div role="dialog" aria-modal="true" aria-label="Courant one-to-one voice lesson" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "radial-gradient(ellipse at 50% 28%, #39483f 0%, #202923 58%, #151c18 100%)", color: "#f4f5ef", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "max(28px, env(safe-area-inset-top)) 22px max(26px, env(safe-area-inset-bottom))", overflowY: "auto" }}>
+        <div style={{ width: "100%", maxWidth: 720, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div><div style={{ fontSize: 11, letterSpacing: ".18em", color: "#c2d0c1", fontWeight: 700 }}>COURANT · PRIVATE LESSON</div><div style={{ marginTop: 5, fontSize: 13, color: "#aebcaf" }}>One-to-one English practice</div></div>
+          <span style={{ border: "1px solid #718073", background: "#344238", borderRadius: 99, padding: "7px 12px", fontSize: 11, color: "#dce8d8" }}>● {listening ? "LISTENING" : speaking ? "SPEAKING" : transcribing ? "HEARING YOU" : loading ? "THINKING" : "CONNECTED"}</span>
+        </div>
+        <div style={{ width: "100%", maxWidth: 720, display: "flex", flex: 1, flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22, minHeight: 300 }}>
+          <div className={speaking ? "courant-call-orbit courant-call-speaking" : "courant-call-orbit"} style={{ width: "min(68vw, 310px)", aspectRatio: "1", borderRadius: "50%", display: "grid", placeItems: "center", background: "radial-gradient(circle, #80927b 0%, #526751 48%, #344438 72%)", boxShadow: speaking ? "0 0 0 18px rgba(184,208,174,.08), 0 0 90px rgba(182,214,168,.3)" : "0 0 0 12px rgba(184,208,174,.06), 0 0 60px rgba(182,214,168,.12)", transition: "box-shadow .35s ease" }}>
+            <svg viewBox="0 0 260 230" role="img" aria-label="Courant, your English teacher" style={{ width: "88%", height: "88%", filter: "drop-shadow(0 12px 20px rgba(0,0,0,.18))" }}>
+              <defs><linearGradient id="call-skin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f4d4bd"/><stop offset="1" stopColor="#dba98d"/></linearGradient><linearGradient id="call-shirt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a9b89d"/><stop offset="1" stopColor="#647c66"/></linearGradient></defs>
+              <path d="M35 230c8-56 40-78 95-78s87 22 95 78" fill="url(#call-shirt)"/><path d="M110 145h40v37h-40z" fill="url(#call-skin)"/><path d="M74 91c-4-53 20-82 57-82 42 0 66 32 59 86l-12 43H82z" fill="#3e493f"/><ellipse cx="130" cy="91" rx="55" ry="65" fill="url(#call-skin)"/><path d="M75 81c-1-43 22-72 59-72 39 0 61 28 60 66-18-8-31-22-39-40-19 22-45 34-80 35z" fill="#465344"/><path d="M99 85q11-9 22 0M140 85q11-9 22 0" fill="none" stroke="#654f45" strokeWidth="3.5" strokeLinecap="round"/><ellipse cx="110" cy="96" rx="4" ry="5" fill="#354037"/><ellipse cx="151" cy="96" rx="4" ry="5" fill="#354037"/><path d="M130 99l-5 18q5 5 11 0" fill="none" stroke="#c58f76" strokeWidth="2.2" strokeLinecap="round"/>{speaking ? <ellipse cx="130" cy="132" rx="9" ry="8" fill="#8e514c"/> : <path d="M117 130q13 12 26 0" fill="none" stroke="#985b55" strokeWidth="3" strokeLinecap="round"/>}
+            </svg>
+          </div>
+          <div style={{ textAlign: "center" }}><div style={{ fontSize: 25, fontWeight: 600, letterSpacing: "-.03em" }}>Courant</div><div style={{ marginTop: 7, color: "#c0cbbd", fontSize: 14 }}>{speaking ? "Speaking to you" : transcribing ? "Listening to your words" : loading ? "Thinking about your answer" : listening ? "I'm listening. Take your time." : "Your lesson is ready"}</div></div>
+          <div aria-live="polite" style={{ width: "min(100%, 540px)", minHeight: 62, padding: "14px 18px", borderRadius: 16, background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.1)", textAlign: "center", color: "#e8eee5", lineHeight: 1.6, fontSize: 14 }}>{lines.length ? lines[lines.length - 1].text : "Your teacher will greet you and begin the lesson."}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, height: 28, opacity: speaking ? 1 : .45 }} aria-hidden="true">{[10,18,25,14,22,30,16,24,12,20,28,15,23].map((h,i)=><span key={i} className="courant-call-wave" style={{ height: h, animationDelay: String(i*55)+"ms" }}/>)}</div>
+        </div>
+        {cameraOn && <div style={{ width: "min(100%, 220px)", height: 130, borderRadius: 16, overflow: "hidden", border: "1px solid #82917f", background: "#303a34" }}><video ref={videoRef} autoPlay muted playsInline aria-label="Your camera preview" style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }}/></div>}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 14, width: "100%", paddingTop: 22 }}>
+          <button type="button" onClick={() => { if (recorderRef.current?.state === "recording") recorderRef.current.stop(); setVoiceCall(false); voiceCallRef.current = false; setListening(false); window.speechSynthesis.cancel(); setSpeaking(false); setStatus("Lesson call ended."); }} style={{ width: 68, height: 68, borderRadius: "50%", border: 0, background: "#b9574d", color: "white", fontSize: 25, cursor: "pointer" }} aria-label="End voice call">☎</button>
+          <button type="button" onClick={() => void toggleCamera()} style={{ width: 52, height: 52, borderRadius: "50%", border: "1px solid #718073", background: cameraOn ? "#60785f" : "#344238", color: "white", fontSize: 20, cursor: "pointer" }} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>▣</button>
+        </div>
+        <div style={{ fontSize: 11, color: "#9eac9d", textAlign: "center", maxWidth: 520 }}>Hands-free voice lesson · spoken turns are processed on this device. The current engine listens between replies; it does not yet support talking over the teacher.</div>
+      </div>}
     </main>
   );
 }
