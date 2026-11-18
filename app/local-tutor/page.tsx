@@ -5,12 +5,11 @@ import { useEffect, useRef, useState } from "react";
 type ChatLine = { role: "you" | "teacher"; text: string };
 type ModelMessage = { role: "system" | "user" | "assistant"; content: string };
 type LocalPipeline = (input: unknown) => Promise<unknown>;
+type LocalChunk = { choices?: Array<{ delta?: { content?: string | null }; message?: { content?: string | null } }> };
 type LocalEngine = {
   chat: {
     completions: {
-      create: (input: { messages: ModelMessage[]; temperature: number; max_tokens: number }) => Promise<{
-        choices?: Array<{ message?: { content?: string | null } }>;
-      }>;
+      create: (input: { messages: ModelMessage[]; temperature: number; max_tokens: number; stream?: boolean }) => Promise<AsyncIterable<LocalChunk> | { choices?: Array<{ message?: { content?: string | null } }> }>;
     };
   };
 };
@@ -26,6 +25,7 @@ export default function LocalTutorPage() {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [listening, setListening] = useState(false);
+  const [voiceCall, setVoiceCall] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
   const [selectedImageName, setSelectedImageName] = useState("");
@@ -203,8 +203,15 @@ export default function LocalTutorPage() {
           const result = await transcriber(audio.getChannelData(0));
           const transcript = typeof result === "object" && result !== null && "text" in result ? String((result as { text: unknown }).text).trim() : "";
           if (!transcript) throw new Error("No words were recognised. Try speaking closer to the microphone.");
-          setPrompt(transcript);
-          setStatus("Whisper transcribed your speech on this device. Review the words, then send them to your teacher.");
+          if (voiceCall) {
+            setPrompt("");
+            setStatus("I heard you. Courant is preparing your reply…");
+            await processMessage(transcript);
+            if (voiceCall) void startListening();
+          } else {
+            setPrompt(transcript);
+            setStatus("Whisper transcribed your speech on this device. Review the words, then send them to your teacher.");
+          }
         } catch (cause) {
           setStatus(cause instanceof Error ? cause.message : "Local speech recognition failed. You can type your answer instead.");
         } finally {
@@ -350,24 +357,50 @@ CONVERSATION RULES:
           content: line.text,
         })),
       ];
-      const result = await engine.chat.completions.create({ messages, temperature: 0.7, max_tokens: 220 });
-      const reply = String(result.choices?.[0]?.message?.content || "").trim();
+      const response = await engine.chat.completions.create({ messages, temperature: 0.55, max_tokens: 160, stream: true });
+      let reply = "";
+      if (Symbol.asyncIterator in Object(response)) {
+        for await (const chunk of response as AsyncIterable<LocalChunk>) {
+          const piece = chunk.choices?.[0]?.delta?.content || "";
+          if (!piece) continue;
+          reply += piece;
+          const partial = reply;
+          setLines(current => {
+            const next = [...current];
+            const last = next[next.length - 1];
+            if (last?.role === "teacher") next[next.length - 1] = { role: "teacher", text: partial };
+            else next.push({ role: "teacher", text: partial });
+            return next;
+          });
+        }
+      } else {
+        reply = String(response.choices?.[0]?.message?.content || "");
+      }
+      reply = reply.trim();
       if (!reply) throw new Error("The local model returned an empty reply. Please try again.");
-      setLines(current => [...current, { role: "you", text: learnerText || "Please help me describe this picture." }, { role: "teacher", text: reply }]);
+      setLines(current => {
+        const next = [...current];
+        const last = next[next.length - 1];
+        if (last?.role === "teacher") next[next.length - 1] = { role: "teacher", text: reply };
+        else next.push({ role: "teacher", text: reply });
+        return next;
+      });
       if (voiceEnabled && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(reply);
-        utterance.onstart = () => setSpeaking(true);
-        utterance.onend = () => setSpeaking(false);
-        utterance.onerror = () => setSpeaking(false);
-        const englishVoice = window.speechSynthesis.getVoices().find(voice => /^en(-|_)/i.test(voice.lang));
-        if (englishVoice) utterance.voice = englishVoice;
-        utterance.rate = 0.94;
-        window.speechSynthesis.speak(utterance);
+        await new Promise<void>(resolve => {
+          const utterance = new SpeechSynthesisUtterance(reply);
+          utterance.onstart = () => setSpeaking(true);
+          utterance.onend = () => { setSpeaking(false); resolve(); };
+          utterance.onerror = () => { setSpeaking(false); resolve(); };
+          const englishVoice = window.speechSynthesis.getVoices().find(voice => /^en(-|_)/i.test(voice.lang));
+          if (englishVoice) utterance.voice = englishVoice;
+          utterance.rate = 1.04;
+          window.speechSynthesis.speak(utterance);
+        });
       } else {
         setSpeaking(false);
       }
-      setStatus("Your teacher has replied. Speak again or type your next answer.");
+      setStatus(voiceCall ? "Your turn — I’m listening." : "Your teacher has replied. Speak again or type your next answer.");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "The local tutor could not respond.";
       setStatus(message);
@@ -377,6 +410,25 @@ CONVERSATION RULES:
     }
   }
 
+
+  async function toggleVoiceCall() {
+    if (voiceCall) {
+      setVoiceCall(false);
+      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+      setListening(false);
+      setStatus("Voice call ended. You can continue by typing or start another call.");
+      return;
+    }
+    if (!ready) {
+      try { await ensureModel(); } catch (cause) {
+        setStatus(cause instanceof Error ? cause.message : "Could not prepare the local tutor.");
+        return;
+      }
+    }
+    setVoiceCall(true);
+    setStatus("Voice call starting. Speak naturally after the microphone activates.");
+    await startListening();
+  }
 
   async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -402,7 +454,7 @@ CONVERSATION RULES:
         <header style={{ margin: "40px 0 28px" }}>
           <p style={{ color: "#6b725d", letterSpacing: ".12em", textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>Private practice · on-device AI</p>
           <h1 style={{ fontSize: "clamp(34px, 6vw, 54px)", letterSpacing: "-.045em", lineHeight: 1.05, fontWeight: 600, margin: "12px 0" }}>Your own English teacher, one lesson at a time.</h1>
-          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Have a private one-to-one English lesson with a tutor that guides the conversation, adapts to your level, corrects useful mistakes and follows your learning goal. Speak or type naturally.</p>
+          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Have a private one-to-one English lesson with a tutor that guides the conversation, adapts to your level, corrects useful mistakes and follows your learning goal. Speak naturally in a hands-free, turn-by-turn voice call, or type whenever you prefer.</p>
         </header>
 
         <section style={{ background: "#fff", border: "1px solid #e8e7df", borderRadius: 20, padding: 22, marginBottom: 18 }}>
@@ -429,7 +481,7 @@ CONVERSATION RULES:
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={rememberProgress} onChange={event => setRememberProgress(event.target.checked)} /> Remember my progress on this device</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model is larger and needs a capable WebGPU device and more memory. It downloads on first use, then runs on-device. Speech transcription uses local Whisper after its first model download; spoken replies use your device's installed voices. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The 1.5B tutor model needs a capable WebGPU device and downloads once. Replies stream as they are generated, with shorter answers for quicker turns. Voice call mode uses local Whisper and your device voice; it listens after each reply. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
@@ -478,6 +530,10 @@ CONVERSATION RULES:
             <button type="button" onClick={finishLesson} disabled={loading || reviewLoading} style={{ border: 0, borderRadius: 999, padding: "9px 14px", background: "#e9eddf", color: "#343b2d", fontSize: 12, cursor: "pointer", opacity: loading || reviewLoading ? .6 : 1 }}>{reviewLoading ? "Preparing your lesson review…" : "Finish lesson & get feedback"}</button>
           </div>}
           {lessonReview && <section aria-live="polite" style={{ margin: "14px 18px", padding: 18, borderRadius: 14, background: "#f4f5ef", border: "1px solid #e2e7dc" }}><h3 style={{ fontSize: 16, fontWeight: 650, margin: "0 0 10px" }}>Your lesson review</h3><p style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.7, color: "#44483f", margin: 0 }}>{lessonReview}</p></section>}
+          <div style={{ borderTop: "1px solid #eeede6", padding: "14px 14px 0", display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => void toggleVoiceCall()} disabled={transcribing || (loading && !voiceCall)} style={{ flex: "1 1 180px", minHeight: 48, border: 0, borderRadius: 12, padding: "0 18px", background: voiceCall ? "#8c5148" : "#343b2d", color: "white", cursor: "pointer", fontWeight: 650 }}>{voiceCall ? "End voice call" : "Start 1:1 voice call"}</button>
+            <span style={{ alignSelf: "center", color: "#77796f", fontSize: 12 }}>{voiceCall ? (listening ? "Listening for your turn" : speaking ? "Courant is speaking" : "Preparing next turn") : "Hands-free, turn-by-turn conversation"}</span>
+          </div>
           <form onSubmit={sendMessage} style={{ borderTop: "1px solid #eeede6", padding: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
             <input value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Tell your teacher what you would like to talk about…" aria-label="Message to the local English tutor" style={{ minWidth: 0, flex: "1 1 220px", border: "1px solid #e2e1d9", borderRadius: 12, padding: "14px 15px", background: "#fff", color: "#252722", font: "inherit" }} />
             <button type="button" onClick={() => void startListening()} aria-pressed={listening} disabled={transcribing || loading} style={{ border: "1px solid #deded5", borderRadius: 12, padding: "0 15px", minHeight: 48, background: listening ? "#e9eddf" : "#fff", color: "#343b2d", cursor: "pointer" }}>{listening ? "Stop listening" : transcribing ? "Transcribing…" : "Speak"}</button>
