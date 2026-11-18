@@ -53,6 +53,7 @@ export default function LocalTutorPage() {
   const visionPipelineRef = useRef<LocalPipeline | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const voiceMonitorRef = useRef<{ context: AudioContext; frame: number } | null>(null);
+  const interruptMonitorRef = useRef<{ context: AudioContext; stream: MediaStream; frame: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -92,6 +93,7 @@ export default function LocalTutorPage() {
 
   useEffect(() => () => {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    if (interruptMonitorRef.current) { cancelAnimationFrame(interruptMonitorRef.current.frame); interruptMonitorRef.current.stream.getTracks().forEach(track => track.stop()); void interruptMonitorRef.current.context.close(); interruptMonitorRef.current = null; }
     streamRef.current?.getTracks().forEach(track => track.stop());
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
@@ -343,6 +345,68 @@ export default function LocalTutorPage() {
     setStatus("New lesson ready. Tell your teacher what you would like to practise.");
   }
 
+  async function watchForInterruption() {
+    if (!voiceCallRef.current || interruptMonitorRef.current || !navigator.mediaDevices?.getUserMedia) return;
+    try {
+      // Keep the microphone live during teacher playback so the learner can interrupt naturally.
+      // Browser echo cancellation is requested to reduce the teacher's own voice triggering this.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      if (!voiceCallRef.current || !window.speechSynthesis?.speaking) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      const context = new AudioContext();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      context.createMediaStreamSource(stream).connect(analyser);
+      const samples = new Uint8Array(analyser.fftSize);
+      let voicedFrames = 0;
+      const detect = () => {
+        if (!voiceCallRef.current || !window.speechSynthesis?.speaking) {
+          stream.getTracks().forEach(track => track.stop());
+          void context.close();
+          interruptMonitorRef.current = null;
+          return;
+        }
+        analyser.getByteTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) {
+          const amplitude = (sample - 128) / 128;
+          energy += amplitude * amplitude;
+        }
+        const rms = Math.sqrt(energy / samples.length);
+        voicedFrames = rms > 0.055 ? voicedFrames + 1 : Math.max(0, voicedFrames - 2);
+        if (voicedFrames >= 5) {
+          cancelAnimationFrame(interruptMonitorRef.current?.frame || 0);
+          stream.getTracks().forEach(track => track.stop());
+          void context.close();
+          interruptMonitorRef.current = null;
+          setStatus("I hear you — go ahead. Courant is listening.");
+          window.speechSynthesis.cancel();
+          setSpeaking(false);
+          // Let the interrupted response finish its cleanup before opening the next recording turn.
+          Promise.resolve().then(() => { if (voiceCallRef.current) void startListening(); });
+          return;
+        }
+        const frame = requestAnimationFrame(detect);
+        interruptMonitorRef.current = { context, stream, frame };
+      };
+      const frame = requestAnimationFrame(detect);
+      interruptMonitorRef.current = { context, stream, frame };
+    } catch {
+      setStatus("For interruptions, allow microphone access while Courant is speaking. You can still speak after each reply.");
+    }
+  }
+
+  function stopInterruptionMonitor() {
+    const monitor = interruptMonitorRef.current;
+    if (!monitor) return;
+    cancelAnimationFrame(monitor.frame);
+    monitor.stream.getTracks().forEach(track => track.stop());
+    void monitor.context.close().catch(() => undefined);
+    interruptMonitorRef.current = null;
+  }
+
   async function processMessage(text: string) {
     const cleanText = text.trim();
     if ((!cleanText && !selectedImage) || loading) return;
@@ -431,9 +495,20 @@ CONVERSATION RULES:
         window.speechSynthesis.cancel();
         await new Promise<void>(resolve => {
           const utterance = new SpeechSynthesisUtterance(reply);
-          utterance.onstart = () => setSpeaking(true);
-          utterance.onend = () => { setSpeaking(false); resolve(); };
-          utterance.onerror = () => { setSpeaking(false); resolve(); };
+          let settled = false;
+          const finishSpeech = () => {
+            if (settled) return;
+            settled = true;
+            stopInterruptionMonitor();
+            setSpeaking(false);
+            resolve();
+          };
+          utterance.onstart = () => {
+            setSpeaking(true);
+            if (voiceCallRef.current) void watchForInterruption();
+          };
+          utterance.onend = finishSpeech;
+          utterance.onerror = finishSpeech;
           const availableVoices = window.speechSynthesis.getVoices();
           const naturalVoice = availableVoices.find(voice => /aria|jenny|samantha|ava|alloy|google us english|microsoft.*(natural|online)|zira/i.test(voice.name) && /^en(-|_)/i.test(voice.lang))
             || availableVoices.find(voice => /en-US/i.test(voice.lang))
@@ -463,6 +538,8 @@ CONVERSATION RULES:
     if (voiceCallRef.current) {
       voiceCallRef.current = false;
       setVoiceCall(false);
+      stopInterruptionMonitor();
+      window.speechSynthesis.cancel();
       if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       setListening(false);
       setStatus("Voice call ended. You can continue by typing or start another call.");
@@ -639,7 +716,7 @@ CONVERSATION RULES:
           <button type="button" onClick={() => { if (recorderRef.current?.state === "recording") recorderRef.current.stop(); setVoiceCall(false); voiceCallRef.current = false; setListening(false); window.speechSynthesis.cancel(); setSpeaking(false); setStatus("Lesson call ended."); }} style={{ width: 68, height: 68, borderRadius: "50%", border: 0, background: "#b9574d", color: "white", fontSize: 25, cursor: "pointer" }} aria-label="End voice call">☎</button>
           <button type="button" onClick={() => void toggleCamera()} style={{ width: 52, height: 52, borderRadius: "50%", border: "1px solid #718073", background: cameraOn ? "#60785f" : "#344238", color: "white", fontSize: 20, cursor: "pointer" }} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>▣</button>
         </div>
-        <div style={{ fontSize: 11, color: "#9eac9d", textAlign: "center", maxWidth: 520 }}>Hands-free voice lesson · spoken turns are processed on this device. The current engine listens between replies; it does not yet support talking over the teacher.</div>
+        <div style={{ fontSize: 11, color: "#9eac9d", textAlign: "center", maxWidth: 520 }}>Speak naturally, even while Courant is talking — it will stop and listen. Headphones help prevent speaker echo. Speech recognition and the language model run on this device; replies are still generated turn by turn.</div>
       </div>}
     </main>
   );
