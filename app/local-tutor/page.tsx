@@ -26,6 +26,7 @@ export default function LocalTutorPage() {
   const [ready, setReady] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceCall, setVoiceCall] = useState(false);
+  const voiceCallRef = useRef(false);
   const [transcribing, setTranscribing] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
   const [selectedImageName, setSelectedImageName] = useState("");
@@ -203,11 +204,11 @@ export default function LocalTutorPage() {
           const result = await transcriber(audio.getChannelData(0));
           const transcript = typeof result === "object" && result !== null && "text" in result ? String((result as { text: unknown }).text).trim() : "";
           if (!transcript) throw new Error("No words were recognised. Try speaking closer to the microphone.");
-          if (voiceCall) {
+          if (voiceCallRef.current) {
             setPrompt("");
             setStatus("I heard you. Courant is preparing your reply…");
             await processMessage(transcript);
-            if (voiceCall) void startListening();
+            if (voiceCallRef.current) void startListening();
           } else {
             setPrompt(transcript);
             setStatus("Whisper transcribed your speech on this device. Review the words, then send them to your teacher.");
@@ -400,7 +401,7 @@ CONVERSATION RULES:
       } else {
         setSpeaking(false);
       }
-      setStatus(voiceCall ? "Your turn — I’m listening." : "Your teacher has replied. Speak again or type your next answer.");
+      setStatus(voiceCallRef.current ? "Your turn — I’m listening." : "Your teacher has replied. Speak again or type your next answer.");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "The local tutor could not respond.";
       setStatus(message);
@@ -412,7 +413,8 @@ CONVERSATION RULES:
 
 
   async function toggleVoiceCall() {
-    if (voiceCall) {
+    if (voiceCallRef.current) {
+      voiceCallRef.current = false;
       setVoiceCall(false);
       if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       setListening(false);
@@ -425,6 +427,7 @@ CONVERSATION RULES:
         return;
       }
     }
+    voiceCallRef.current = true;
     setVoiceCall(true);
     setStatus("Voice call starting. Speak naturally after the microphone activates.");
     await startListening();
