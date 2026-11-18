@@ -434,9 +434,15 @@ CONVERSATION RULES:
           utterance.onstart = () => setSpeaking(true);
           utterance.onend = () => { setSpeaking(false); resolve(); };
           utterance.onerror = () => { setSpeaking(false); resolve(); };
-          const englishVoice = window.speechSynthesis.getVoices().find(voice => /^en(-|_)/i.test(voice.lang));
-          if (englishVoice) utterance.voice = englishVoice;
-          utterance.rate = 1.04;
+          const availableVoices = window.speechSynthesis.getVoices();
+          const naturalVoice = availableVoices.find(voice => /aria|jenny|samantha|ava|alloy|google us english|microsoft.*(natural|online)|zira/i.test(voice.name) && /^en(-|_)/i.test(voice.lang))
+            || availableVoices.find(voice => /en-US/i.test(voice.lang))
+            || availableVoices.find(voice => /^en(-|_)/i.test(voice.lang));
+          if (naturalVoice) utterance.voice = naturalVoice;
+          utterance.lang = naturalVoice?.lang || "en-US";
+          utterance.rate = 0.96;
+          utterance.pitch = 1.04;
+          utterance.volume = 1;
           window.speechSynthesis.speak(utterance);
         });
       } else {
@@ -486,7 +492,7 @@ CONVERSATION RULES:
         @keyframes courant-avatar-blink { 0%,45%,48%,100% { transform: scaleY(1); } 46.5%,47.5% { transform: scaleY(.12); } }
         @keyframes courant-avatar-mouth { 0%,100% { transform: scaleY(.55); } 50% { transform: scaleY(1.18); } }
         @keyframes courant-avatar-glow { 0%,100% { opacity: .25; transform: scale(.96); } 50% { opacity: .55; transform: scale(1.04); } }
-        .courant-avatar-art { animation: courant-avatar-float 4.5s ease-in-out infinite; transform-origin: 50% 90%; }
+        .courant-avatar-art { animation: courant-avatar-float 4.5s ease-in-out infinite; transform-origin: 50% 90%; }\n        .courant-avatar-speaking .courant-avatar-art { filter: drop-shadow(0 7px 12px rgba(78,103,75,.12)); }\n        .courant-avatar-speaking { animation-duration: 3.2s; }
         .courant-avatar-eye { transform-box: fill-box; transform-origin: center; animation: courant-avatar-blink 5.2s ease-in-out infinite; }
         .courant-avatar-mouth { transform-box: fill-box; transform-origin: center; }
         .courant-avatar-speaking .courant-avatar-mouth { animation: courant-avatar-mouth .28s ease-in-out infinite alternate; }
@@ -531,22 +537,33 @@ CONVERSATION RULES:
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
           <div style={{ background: "#e9ede3", border: "1px solid #dfe4d8", borderRadius: 20, padding: 20, minHeight: 250, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
             <span style={{ position: "absolute", top: 16, left: 18, color: "#66715c", fontSize: 11, fontWeight: 700, letterSpacing: ".12em" }}>COURANT · LOCAL TEACHER</span>
-            <svg viewBox="0 0 220 190" role="img" aria-label={speaking ? "Animated teacher speaking" : "Animated teacher ready"} className={speaking ? "courant-avatar-art courant-avatar-speaking" : "courant-avatar-art"} style={{ width: "min(100%, 220px)", height: 180, marginTop: 20 }}>
-              <ellipse className="courant-avatar-halo" cx="110" cy="178" rx="78" ry="10" fill="#d4ddce"/>
-              <path d="M48 181c4-37 27-55 62-55s58 18 62 55" fill="#6f8066"/>
-              <path d="M58 73c0-43 22-66 53-66 35 0 56 26 53 68l-9 37H68z" fill="#4c5546"/>
-              <ellipse cx="110" cy="83" rx="53" ry="62" fill="#e9bfa0"/>
-              <path d="M57 75c-4-39 16-67 53-68 36-1 55 24 55 59-12-7-22-18-27-31-17 18-44 27-81 25z" fill="#4c5546"/>
-              <path d="M83 82q8-7 16 0" fill="none" stroke="#5b493f" strokeWidth="3" strokeLinecap="round"/>
-              <path d="M122 82q8-7 16 0" fill="none" stroke="#5b493f" strokeWidth="3" strokeLinecap="round"/>
-              <circle className="courant-avatar-eye" cx="91" cy="91" r="3" fill="#3c3935"/><circle className="courant-avatar-eye" cx="130" cy="91" r="3" fill="#3c3935"/>
-              <path d="M109 92l-4 13 8 2" fill="none" stroke="#c68e72" strokeWidth="2" strokeLinecap="round"/>
-              {speaking ? <ellipse className="courant-avatar-mouth" cx="110" cy="119" rx="10" ry="9" fill="#8f4f4a" stroke="#79413e" strokeWidth="2"/> : <path className="courant-avatar-mouth" d="M98 118q12 10 24 0" fill="none" stroke="#9b5c55" strokeWidth="3" strokeLinecap="round"/>}
-              <path d="M68 150q42 22 84 0" fill="none" stroke="#829477" strokeWidth="3" opacity=".65"/>
+            <svg viewBox="0 0 260 230" role="img" aria-label={speaking ? "Courant is speaking" : listening ? "Courant is listening" : loading ? "Courant is thinking" : "Courant is ready to talk"} className={speaking ? "courant-avatar-art courant-avatar-speaking" : "courant-avatar-art"} style={{ width: "min(100%, 250px)", height: 205, marginTop: 20 }}>
+              <defs>
+                <linearGradient id="courant-skin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f4d4bd"/><stop offset="1" stopColor="#dba98d"/></linearGradient>
+                <linearGradient id="courant-shirt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#82947a"/><stop offset="1" stopColor="#536b58"/></linearGradient>
+                <radialGradient id="courant-light"><stop offset="0" stopColor="#fff" stopOpacity=".65"/><stop offset="1" stopColor="#d9e4d1" stopOpacity="0"/></radialGradient>
+              </defs>
+              <ellipse className="courant-avatar-halo" cx="130" cy="204" rx="94" ry="15" fill="#cbd8c4"/>
+              <circle className="courant-avatar-halo" cx="130" cy="104" r="96" fill="url(#courant-light)"/>
+              <path d="M48 220c5-49 34-72 82-72s77 23 82 72" fill="url(#courant-shirt)"/>
+              <path d="M104 148l26 29 26-29" fill="#f1d1b9"/>
+              <path d="M111 143h38v34h-38z" fill="url(#courant-skin)"/>
+              <path d="M76 88c-4-49 20-77 57-77 42 0 66 31 59 82l-11 46H84z" fill="#3e493f"/>
+              <ellipse cx="130" cy="91" rx="55" ry="65" fill="url(#courant-skin)"/>
+              <path d="M75 81c-1-43 22-72 59-72 39 0 61 28 60 66-18-8-31-22-39-40-19 22-45 34-80 35z" fill="#465344"/>
+              <path d="M77 85c-7 8-8 22-1 31M183 85c7 8 8 22 1 31" fill="none" stroke="#d39d82" strokeWidth="7" strokeLinecap="round"/>
+              <path d="M99 85q11-9 22 0M140 85q11-9 22 0" fill="none" stroke="#654f45" strokeWidth="3.5" strokeLinecap="round"/>
+              <ellipse className="courant-avatar-eye" cx="110" cy="96" rx="4" ry="5" fill="#354037"/><ellipse className="courant-avatar-eye" cx="151" cy="96" rx="4" ry="5" fill="#354037"/>
+              <circle cx="111" cy="95" r="1.4" fill="#fff"/><circle cx="152" cy="95" r="1.4" fill="#fff"/>
+              <path d="M130 99l-5 18q5 5 11 0" fill="none" stroke="#c58f76" strokeWidth="2.2" strokeLinecap="round"/>
+              <ellipse cx="94" cy="117" rx="10" ry="5" fill="#d98e80" opacity=".25"/><ellipse cx="166" cy="117" rx="10" ry="5" fill="#d98e80" opacity=".25"/>
+              {speaking ? <ellipse className="courant-avatar-mouth" cx="130" cy="132" rx="9" ry="8" fill="#8e514c" stroke="#78433f" strokeWidth="2"/> : <path className="courant-avatar-mouth" d="M117 130q13 12 26 0" fill="none" stroke="#985b55" strokeWidth="3" strokeLinecap="round"/>}
+              <path d="M93 180q37 18 74 0" fill="none" stroke="#a8b79f" strokeWidth="3" opacity=".8"/>
+              <path d="M114 180l16 17 16-17" fill="none" stroke="#e4e9dc" strokeWidth="2" opacity=".9"/>
             </svg>
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#53614c", fontSize: 13, marginTop: 2 }}>
               <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 99, background: speaking ? "#6c9369" : "#aab19f", boxShadow: speaking ? "0 0 0 4px #d6e2d0" : "none" }} />
-              {speaking ? "Speaking" : loading ? "Thinking" : "Ready to practise"}
+              {speaking ? "Speaking" : listening ? "Listening" : transcribing ? "Understanding you" : loading ? "Thinking" : "Ready to practise"}
             </div>
           </div>
           <div style={{ background: "#252b27", border: "1px solid #39433d", borderRadius: 20, padding: 14, minHeight: 250, display: "flex", flexDirection: "column", justifyContent: "space-between", overflow: "hidden" }}>
