@@ -52,6 +52,7 @@ export default function LocalTutorPage() {
   const speechPipelineRef = useRef<LocalPipeline | null>(null);
   const visionPipelineRef = useRef<LocalPipeline | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const voiceMonitorRef = useRef<{ context: AudioContext; frame: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -184,6 +185,11 @@ export default function LocalTutorPage() {
       audioChunksRef.current = [];
       recorder.ondataavailable = event => { if (event.data.size) audioChunksRef.current.push(event.data); };
       recorder.onstop = async () => {
+        if (voiceMonitorRef.current) {
+          cancelAnimationFrame(voiceMonitorRef.current.frame);
+          await voiceMonitorRef.current.context.close().catch(() => undefined);
+          voiceMonitorRef.current = null;
+        }
         stream.getTracks().forEach(track => track.stop());
         setListening(false);
         setTranscribing(true);
@@ -223,7 +229,42 @@ export default function LocalTutorPage() {
       recorderRef.current = recorder;
       recorder.start();
       setListening(true);
-      setStatus("Recording on this device. Speak naturally, then tap Stop listening.");
+      if (voiceCallRef.current) {
+        const monitorContext = new AudioContext();
+        const analyser = monitorContext.createAnalyser();
+        analyser.fftSize = 512;
+        monitorContext.createMediaStreamSource(stream).connect(analyser);
+        const samples = new Uint8Array(analyser.fftSize);
+        let speechStarted = false;
+        let silenceStarted = 0;
+        const listenForTurnEnd = () => {
+          if (recorder.state !== "recording") return;
+          analyser.getByteTimeDomainData(samples);
+          let energy = 0;
+          for (const sample of samples) {
+            const amplitude = (sample - 128) / 128;
+            energy += amplitude * amplitude;
+          }
+          const rms = Math.sqrt(energy / samples.length);
+          if (rms > 0.025) {
+            speechStarted = true;
+            silenceStarted = 0;
+          } else if (speechStarted) {
+            if (!silenceStarted) silenceStarted = performance.now();
+            if (performance.now() - silenceStarted > 1100) {
+              recorder.stop();
+              return;
+            }
+          }
+          const frame = requestAnimationFrame(listenForTurnEnd);
+          voiceMonitorRef.current = { context: monitorContext, frame };
+        };
+        const frame = requestAnimationFrame(listenForTurnEnd);
+        voiceMonitorRef.current = { context: monitorContext, frame };
+        setStatus("Listening… speak naturally. Courant detects when you finish and replies automatically.");
+      } else {
+        setStatus("Recording on this device. Speak naturally, then tap Stop listening.");
+      }
     } catch {
       setStatus("Microphone permission was not granted or recording is unavailable. You can continue by typing.");
     }
