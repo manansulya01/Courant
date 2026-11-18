@@ -171,8 +171,10 @@ export default function LocalTutorPage() {
   }
 
   async function startListening() {
-    if (listening) {
-      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    // Use the recorder itself as the source of truth. React state can be one render
+    // behind when a speech turn ends and the next hands-free turn starts.
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
       setListening(false);
       return;
     }
@@ -216,7 +218,6 @@ export default function LocalTutorPage() {
             setPrompt("");
             setStatus("I heard you. Courant is preparing your reply…");
             await processMessage(transcript);
-            if (voiceCallRef.current) void startListening();
           } else {
             setPrompt(transcript);
             setStatus("Whisper transcribed your speech on this device. Review the words, then send them to your teacher.");
@@ -226,36 +227,47 @@ export default function LocalTutorPage() {
         } finally {
           if (context && context.state !== "closed") await context.close().catch(() => undefined);
           setTranscribing(false);
+          // A failed/empty transcription must not silently kill a hands-free call.
+          // Restart only after transcription and any model reply have fully settled.
+          if (voiceCallRef.current) {
+            window.setTimeout(() => {
+              if (voiceCallRef.current && recorderRef.current?.state !== "recording") void startListening();
+            }, 250);
+          }
         }
       };
       recorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
       setListening(true);
       if (voiceCallRef.current) {
         const monitorContext = new AudioContext();
         const analyser = monitorContext.createAnalyser();
         analyser.fftSize = 512;
         monitorContext.createMediaStreamSource(stream).connect(analyser);
-        const samples = new Uint8Array(analyser.fftSize);
+        const samples = new Float32Array(analyser.fftSize);
         let speechStarted = false;
+        let voicedFrames = 0;
         let silenceStarted = 0;
         const listenForTurnEnd = () => {
           if (recorder.state !== "recording") return;
-          analyser.getByteTimeDomainData(samples);
+          analyser.getFloatTimeDomainData(samples);
           let energy = 0;
-          for (const sample of samples) {
-            const amplitude = (sample - 128) / 128;
-            energy += amplitude * amplitude;
-          }
+          for (const sample of samples) energy += sample * sample;
           const rms = Math.sqrt(energy / samples.length);
-          if (rms > 0.025) {
-            speechStarted = true;
+          // A lower, consecutive-frame gate is more reliable for quiet voices and
+          // tablet microphones than a single relatively high amplitude threshold.
+          if (rms > 0.012) {
+            voicedFrames += 1;
+            if (voicedFrames >= 3) speechStarted = true;
             silenceStarted = 0;
-          } else if (speechStarted) {
-            if (!silenceStarted) silenceStarted = performance.now();
-            if (performance.now() - silenceStarted > 1100) {
-              recorder.stop();
-              return;
+          } else {
+            voicedFrames = Math.max(0, voicedFrames - 1);
+            if (speechStarted) {
+              if (!silenceStarted) silenceStarted = performance.now();
+              if (performance.now() - silenceStarted > 900) {
+                recorder.stop();
+                return;
+              }
             }
           }
           const frame = requestAnimationFrame(listenForTurnEnd);
@@ -375,7 +387,7 @@ export default function LocalTutorPage() {
           energy += amplitude * amplitude;
         }
         const rms = Math.sqrt(energy / samples.length);
-        voicedFrames = rms > 0.055 ? voicedFrames + 1 : Math.max(0, voicedFrames - 2);
+        voicedFrames = rms > 0.018 ? voicedFrames + 1 : Math.max(0, voicedFrames - 2);
         if (voicedFrames >= 5) {
           cancelAnimationFrame(interruptMonitorRef.current?.frame || 0);
           stream.getTracks().forEach(track => track.stop());
