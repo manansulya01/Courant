@@ -157,7 +157,7 @@ export default function Lab({ params }: { params: Promise<{ slug: string }> }) {
       }
       const userTurn: ChatTurn = { role: "user", content: learnerMessage || "Let's continue our lesson." };
       const messages = [
-        { role: "system" as const, content: TEACHING_PROMPT.replace("SCENARIO", scenario.title) + "\\nScenario details: " + scenario.prompt },
+        { role: "system" as const, content: TEACHING_PROMPT.replace("SCENARIO", scenario.title) + "\nScenario details: " + scenario.prompt },
         ...history.slice(-12).map(turn => ({ role: turn.role, content: turn.content })),
         { role: "user" as const, content: userTurn.content },
       ];
