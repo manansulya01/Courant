@@ -221,8 +221,15 @@ export default function LocalTutorPage() {
       return;
     }
     startingRecorderRef.current = true;
+    const callAtStart = voiceCallRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+      // If the user ended the call or muted while the permission prompt was open,
+      // do not start recording after that intent has changed.
+      if ((callAtStart && !voiceCallRef.current) || micMutedRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(type => MediaRecorder.isTypeSupported(type));
       const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       audioChunksRef.current = [];
