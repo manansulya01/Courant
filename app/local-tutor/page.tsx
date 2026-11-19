@@ -610,7 +610,7 @@ CONVERSATION RULES:
       setVoiceCall(false);
       micMutedRef.current = false;
       setMicMuted(false);
-      discardRecordingRef.current = true;
+      discardRecordingRef.current = recorderRef.current?.state === "recording";
       stopInterruptionMonitor();
       window.speechSynthesis.cancel();
       if (recorderRef.current?.state === "recording") recorderRef.current.stop();
@@ -672,9 +672,15 @@ CONVERSATION RULES:
       <style>{`
         @keyframes courant-call-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.035); } }
         @keyframes courant-call-wave { 0%,100% { transform: scaleY(.45); opacity: .55; } 50% { transform: scaleY(1); opacity: 1; } }
+        @keyframes courant-call-blink { 0%,45%,48%,100% { transform: scaleY(1); } 46.5%,47.5% { transform: scaleY(.08); } }
+        @keyframes courant-call-mouth { from { transform: scaleY(.6); } to { transform: scaleY(1.25); } }
+        .courant-call-eye { transform-box: fill-box; transform-origin: center; animation: courant-call-blink 5.4s ease-in-out infinite; }
+        .courant-call-avatar .courant-call-mouth { transform-box: fill-box; transform-origin: center; }
+        .courant-call-avatar.courant-avatar-speaking .courant-call-mouth { animation: courant-call-mouth .24s ease-in-out infinite alternate; }
+        .courant-call-avatar { animation: courant-avatar-float 4.2s ease-in-out infinite; transform-origin: 50% 90%; }
         .courant-call-speaking { animation: courant-call-pulse 1.8s ease-in-out infinite; }
         .courant-call-wave { width: 4px; border-radius: 8px; background: #c4d5bd; transform-origin: center; animation: courant-call-wave .65s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .courant-call-speaking,.courant-call-wave { animation: none !important; } }
+        @media (prefers-reduced-motion: reduce) { .courant-call-speaking,.courant-call-wave,.courant-call-eye,.courant-call-mouth,.courant-call-avatar { animation: none !important; } }
         @keyframes courant-avatar-float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-5px) rotate(-.5deg); } }
         @keyframes courant-avatar-blink { 0%,45%,48%,100% { transform: scaleY(1); } 46.5%,47.5% { transform: scaleY(.12); } }
         @keyframes courant-avatar-mouth { 0%,100% { transform: scaleY(.55); } 50% { transform: scaleY(1.18); } }
@@ -806,9 +812,32 @@ CONVERSATION RULES:
         </div>
         <div style={{ width: "100%", maxWidth: 720, display: "flex", flex: 1, flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22, minHeight: 300 }}>
           <div className={speaking ? "courant-call-orbit courant-call-speaking" : "courant-call-orbit"} style={{ width: "min(68vw, 310px)", aspectRatio: "1", borderRadius: "50%", display: "grid", placeItems: "center", background: "radial-gradient(circle, #80927b 0%, #526751 48%, #344438 72%)", boxShadow: speaking ? "0 0 0 18px rgba(184,208,174,.08), 0 0 90px rgba(182,214,168,.3)" : "0 0 0 12px rgba(184,208,174,.06), 0 0 60px rgba(182,214,168,.12)", transition: "box-shadow .35s ease" }}>
-            <svg viewBox="0 0 260 230" role="img" aria-label="Courant, your English teacher" style={{ width: "88%", height: "88%", filter: "drop-shadow(0 12px 20px rgba(0,0,0,.18))" }}>
-              <defs><linearGradient id="call-skin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f4d4bd"/><stop offset="1" stopColor="#dba98d"/></linearGradient><linearGradient id="call-shirt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a9b89d"/><stop offset="1" stopColor="#647c66"/></linearGradient></defs>
-              <path d="M35 230c8-56 40-78 95-78s87 22 95 78" fill="url(#call-shirt)"/><path d="M110 145h40v37h-40z" fill="url(#call-skin)"/><path d="M74 91c-4-53 20-82 57-82 42 0 66 32 59 86l-12 43H82z" fill="#3e493f"/><ellipse cx="130" cy="91" rx="55" ry="65" fill="url(#call-skin)"/><path d="M75 81c-1-43 22-72 59-72 39 0 61 28 60 66-18-8-31-22-39-40-19 22-45 34-80 35z" fill="#465344"/><path d="M99 85q11-9 22 0M140 85q11-9 22 0" fill="none" stroke="#654f45" strokeWidth="3.5" strokeLinecap="round"/><ellipse cx="110" cy="96" rx="4" ry="5" fill="#354037"/><ellipse cx="151" cy="96" rx="4" ry="5" fill="#354037"/><path d="M130 99l-5 18q5 5 11 0" fill="none" stroke="#c58f76" strokeWidth="2.2" strokeLinecap="round"/>{speaking ? <ellipse cx="130" cy="132" rx="9" ry="8" fill="#8e514c"/> : <path d="M117 130q13 12 26 0" fill="none" stroke="#985b55" strokeWidth="3" strokeLinecap="round"/>}
+            <svg viewBox="0 0 280 280" role="img" aria-label={speaking ? "Courant is speaking" : listening ? "Courant is listening" : "Courant, your English teacher"} className={speaking ? "courant-call-avatar courant-avatar-speaking" : "courant-call-avatar"} style={{ width: "88%", height: "88%", filter: "drop-shadow(0 12px 20px rgba(0,0,0,.18))" }}>
+              <defs>
+                <linearGradient id="call-face" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ffe0c9"/><stop offset=".55" stopColor="#edbea2"/><stop offset="1" stopColor="#c98f78"/></linearGradient>
+                <linearGradient id="call-hair" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#596452"/><stop offset="1" stopColor="#26372f"/></linearGradient>
+                <linearGradient id="call-coat" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#b5c6a9"/><stop offset="1" stopColor="#607960"/></linearGradient>
+                <radialGradient id="call-cheek"><stop offset="0" stopColor="#d77f78" stopOpacity=".38"/><stop offset="1" stopColor="#d77f78" stopOpacity="0"/></radialGradient>
+              </defs>
+              <ellipse cx="140" cy="267" rx="91" ry="10" fill="#15231b" opacity=".18"/>
+              <path d="M30 280c7-67 48-98 110-98s103 31 110 98" fill="url(#call-coat)"/>
+              <path d="M103 193l37 39 37-39-16-18h-42z" fill="#f2d7c3"/>
+              <path d="M119 157h42v48q-21 20-42 0z" fill="url(#call-face)"/>
+              <path d="M72 112c-5-69 23-105 70-105 52 0 82 39 73 111l-15 54H88z" fill="url(#call-hair)"/>
+              <ellipse cx="140" cy="112" rx="59" ry="75" fill="url(#call-face)"/>
+              <path d="M81 101C77 48 105 10 146 10c43 0 70 31 70 78-20-7-39-24-48-48-19 28-48 46-87 50z" fill="url(#call-hair)"/>
+              <path d="M91 72q13-31 42-37M159 34q24 8 37 34" fill="none" stroke="#87917b" strokeWidth="4" strokeLinecap="round" opacity=".55"/>
+              <path d="M82 103c-12 4-16 18-10 31 4 8 10 11 17 10M198 103c12 4 16 18 10 31-4 8-10 11-17 10" fill="url(#call-face)" stroke="#c58f78" strokeWidth="2"/>
+              <path d="M103 101q15-11 29-1M149 100q15-10 29 1" fill="none" stroke="#665046" strokeWidth="4" strokeLinecap="round"/>
+              <ellipse className="courant-call-eye" cx="119" cy="114" rx="5" ry="6.5" fill="#283b35"/>
+              <ellipse className="courant-call-eye" cx="164" cy="114" rx="5" ry="6.5" fill="#283b35"/>
+              <circle cx="120.5" cy="112" r="2" fill="#fff"/><circle cx="165.5" cy="112" r="2" fill="#fff"/>
+              <path d="M141 118l-6 22q6 6 13 0" fill="none" stroke="#bd866e" strokeWidth="2.5" strokeLinecap="round"/>
+              <ellipse cx="101" cy="143" rx="18" ry="12" fill="url(#call-cheek)"/><ellipse cx="180" cy="143" rx="18" ry="12" fill="url(#call-cheek)"/>
+              {speaking ? <ellipse className="courant-call-mouth" cx="141" cy="158" rx="10" ry="8" fill="#864c4a" stroke="#75413f" strokeWidth="2"/> : <path className="courant-call-mouth" d="M127 157q14 13 28 0" fill="none" stroke="#985b55" strokeWidth="3.5" strokeLinecap="round"/>}
+              <path d="M103 208l37 31 37-31" fill="none" stroke="#e2eadb" strokeWidth="3" opacity=".9"/>
+              <path d="M140 239v40" stroke="#e2eadb" strokeWidth="2" opacity=".55"/>
+              <circle cx="140" cy="215" r="4" fill="#e2eadb" opacity=".85"/>
             </svg>
           </div>
           <div style={{ textAlign: "center" }}><div style={{ fontSize: 25, fontWeight: 600, letterSpacing: "-.03em" }}>Courant</div><div style={{ marginTop: 7, color: "#c0cbbd", fontSize: 14 }}>{speaking ? "Speaking to you" : transcribing ? "Listening to your words" : loading ? "Thinking about your answer" : listening ? "I'm listening. Take your time." : "Your lesson is ready"}</div></div>
