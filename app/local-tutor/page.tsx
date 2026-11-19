@@ -169,7 +169,16 @@ export default function LocalTutorPage() {
         });
         setStatus("Loaded the compatible 1.5B tutor on this device.");
       } catch {
-        throw upgradeError;
+        setProgress(0);
+        setStatus("This device has limited graphics memory. Trying the lightweight 0.5B tutor…");
+        try {
+          engine = await webllm.CreateMLCEngine("Qwen2.5-0.5B-Instruct-q4f16_1-MLC", {
+            initProgressCallback: onProgress,
+          });
+          setStatus("Loaded the lightweight 0.5B tutor on this device.");
+        } catch {
+          throw upgradeError;
+        }
       }
     }
     engineRef.current = engine as LocalEngine;
@@ -727,7 +736,7 @@ CONVERSATION RULES:
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={voiceEnabled} onChange={event => setVoiceEnabled(event.target.checked)} /> Speak replies aloud</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, color: "#55584f" }}><input type="checkbox" checked={rememberProgress} onChange={event => setRememberProgress(event.target.checked)} /> Remember my progress on this device</label>
           </div>
-          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The upgraded 3B tutor needs a capable WebGPU device and downloads once (about 2.4 GB of model memory); lower-memory devices automatically fall back to the 1.5B model. Replies stream as they are generated, with shorter answers for quicker turns. Voice call mode uses local Whisper and your device voice; it listens after each reply. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
+          <p style={{ fontSize: 12, color: "#77796f", lineHeight: 1.6, margin: "14px 0 0" }}>The upgraded 3B tutor needs a capable WebGPU device and downloads once (about 2.4 GB of model memory); lower-memory devices automatically fall back to 1.5B or 0.5B. Replies stream as they are generated, with shorter answers for quicker turns. Voice call mode uses local Whisper and your device voice; it listens after each reply. When progress memory is enabled, recent lesson turns and your latest review are saved only in this browser on this device. No voice recordings are stored.</p>
         </section>
 
         <section aria-label="Local teacher and camera preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 14, marginBottom: 18 }}>
