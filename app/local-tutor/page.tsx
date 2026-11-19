@@ -464,6 +464,7 @@ export default function LocalTutorPage() {
 
   async function processMessage(text: string) {
     const cleanText = text.trim();
+    const isVoiceCallTurn = voiceCallRef.current;
     if ((!cleanText && !selectedImage) || loading) return;
     setLoading(true);
     setLines(current => [...current, { role: "you", text: cleanText || "Please help me describe this picture." }]);
@@ -547,7 +548,7 @@ CONVERSATION RULES:
         else next.push({ role: "teacher", text: reply });
         return next;
       });
-      if ((voiceEnabled || voiceCallRef.current) && "speechSynthesis" in window) {
+      if ((isVoiceCallTurn ? voiceCallRef.current : voiceEnabled) && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         await new Promise<void>(resolve => {
           const utterance = new SpeechSynthesisUtterance(reply);
