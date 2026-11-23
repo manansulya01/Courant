@@ -700,6 +700,21 @@ CONVERSATION RULES:
       const message = cause instanceof Error ? cause.message : "The local tutor could not respond.";
       setStatus(message);
       setLines(current => [...current, { role: "teacher", text: `I couldn't answer just now: ${message}` }]);
+      // Never leave a phone call completely silent when the model fails.
+      if (isVoiceCallTurn && voiceCallRef.current && "speechSynthesis" in window) {
+        const recovery = message.toLowerCase().includes("webgpu") || message.toLowerCase().includes("model")
+          ? "I'm having trouble loading the language model on this phone. Please refresh the page and try the call again."
+          : "Sorry, I had trouble preparing that reply. Could you say that once more?";
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(recovery);
+          utterance.lang = "en-US";
+          utterance.rate = 0.96;
+          window.speechSynthesis.speak(utterance);
+        } catch {
+          // The visible error remains in the conversation if speech output is unavailable.
+        }
+      }
     } finally {
       setLoading(false);
     }
