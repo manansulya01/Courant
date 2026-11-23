@@ -572,6 +572,41 @@ export default function LocalTutorPage() {
     setPrompt("");
     let learnerText = cleanText;
     try {
+      let reply = "";
+      // Phone calls use the server tutor first: mobile browsers often cannot
+      // allocate the GPU memory required by an on-device language model.
+      if (isVoiceCallTurn && cleanText && !selectedImage) {
+        setStatus("Thinking… preparing your reply.");
+        try {
+          const cloudResponse = await fetch("/api/tutor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({
+              message: cleanText,
+              scenario: "A natural one-to-one spoken English conversation. Keep replies short and friendly.",
+              history: lines.slice(-10).map(line => ({
+                role: line.role === "you" ? "user" : "assistant",
+                content: line.text.slice(-1200),
+              })),
+            }),
+          });
+          if (cloudResponse.ok) {
+            const payload = await cloudResponse.json() as { reply?: unknown };
+            if (typeof payload.reply === "string" && payload.reply.trim()) {
+              reply = payload.reply.trim();
+              setLines(current => [...current, { role: "teacher", text: reply }]);
+            }
+          } else {
+            const payload = await cloudResponse.json().catch(() => ({})) as { error?: string };
+            setStatus(payload.error || "Online tutor unavailable. Switching to the on-device tutor…");
+          }
+        } catch {
+          setStatus("Online tutor unavailable. Switching to the on-device tutor…");
+        }
+      }
+      if (!reply) {
+        if (isVoiceCallTurn) setStatus("Loading the on-device tutor…");
       const engine = await ensureModel();
       if (selectedImage) {
         const vision = await ensureVisionModel();
@@ -622,7 +657,6 @@ CONVERSATION RULES:
         })),
       ];
       const response = await engine.chat.completions.create({ messages, temperature: 0.55, max_tokens: 220, stream: true });
-      let reply = "";
       if (Symbol.asyncIterator in Object(response)) {
         for await (const chunk of response as AsyncIterable<LocalChunk>) {
           const piece = chunk.choices?.[0]?.delta?.content || "";
@@ -649,6 +683,7 @@ CONVERSATION RULES:
         else next.push({ role: "teacher", text: reply });
         return next;
       });
+      }
       if ((isVoiceCallTurn ? voiceCallRef.current : voiceEnabled) && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         await new Promise<void>(resolve => {
@@ -748,8 +783,9 @@ CONVERSATION RULES:
         window.speechSynthesis.speak(unlock);
         window.speechSynthesis.cancel();
       }
-      setStatus("Loading your private English tutor…");
-      if (!ready) await ensureModel();
+      setStatus("Connecting your English tutor…");
+      // Do not block call startup on downloading/initialising a multi-gigabyte
+      // local model. The server tutor answers first; local inference is fallback.
       micMutedRef.current = false;
       setMicMuted(false);
       nativeRecognitionFailedRef.current = false;
