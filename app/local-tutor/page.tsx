@@ -337,18 +337,37 @@ export default function LocalTutorPage() {
         try {
           const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
           if (blob.size < 1200) throw new Error("I didn't receive enough microphone audio. Please try speaking a little closer to the microphone.");
-          context = new AudioContext();
-          const decoded = await context.decodeAudioData(await blob.arrayBuffer());
-          const frames = Math.ceil(decoded.duration * 16000);
-          const offline = new OfflineAudioContext(1, frames, 16000);
-          const source = offline.createBufferSource();
-          source.buffer = decoded;
-          source.connect(offline.destination);
-          source.start();
-          const audio = await offline.startRendering();
-          const transcriber = await ensureSpeechModel();
-          const result = await transcriber(audio.getChannelData(0));
-          const transcript = typeof result === "object" && result !== null && "text" in result ? String((result as { text: unknown }).text).trim() : "";
+          let transcript = "";
+          // Prefer server transcription on phones; loading Whisper locally can
+          // exhaust mobile memory or take so long that the learner hears nothing.
+          if (voiceCallRef.current) {
+            try {
+              const form = new FormData();
+              form.append("audio", blob, "courant-call-audio.webm");
+              form.append("language", "en");
+              const response = await fetch("/api/tutor/transcribe", { method: "POST", body: form, cache: "no-store" });
+              if (response.ok) {
+                const payload = await response.json() as { text?: unknown };
+                if (typeof payload.text === "string") transcript = payload.text.trim();
+              }
+            } catch {
+              // Use local Whisper if the server transcription service is unavailable.
+            }
+          }
+          if (!transcript) {
+            context = new AudioContext();
+            const decoded = await context.decodeAudioData(await blob.arrayBuffer());
+            const frames = Math.ceil(decoded.duration * 16000);
+            const offline = new OfflineAudioContext(1, frames, 16000);
+            const source = offline.createBufferSource();
+            source.buffer = decoded;
+            source.connect(offline.destination);
+            source.start();
+            const audio = await offline.startRendering();
+            const transcriber = await ensureSpeechModel();
+            const result = await transcriber(audio.getChannelData(0));
+            transcript = typeof result === "object" && result !== null && "text" in result ? String((result as { text: unknown }).text).trim() : "";
+          }
           if (!transcript || transcript.length < 2) throw new Error("I couldn't make out those words. Please try again, speaking a little more clearly.");
           if (voiceCallRef.current) {
             setPrompt("");
