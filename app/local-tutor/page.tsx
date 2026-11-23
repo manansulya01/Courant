@@ -5,6 +5,17 @@ import { useEffect, useRef, useState } from "react";
 type ChatLine = { role: "you" | "teacher"; text: string };
 type ModelMessage = { role: "system" | "user" | "assistant"; content: string };
 type LocalPipeline = (input: unknown) => Promise<unknown>;
+type BrowserRecognitionEvent = { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> };
+type BrowserRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: BrowserRecognitionEvent) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  abort: () => void;
+};
 type LocalChunk = { choices?: Array<{ delta?: { content?: string | null }; message?: { content?: string | null } }> };
 type LocalEngine = {
   chat: {
@@ -50,6 +61,8 @@ export default function LocalTutorPage() {
   const engineRef = useRef<LocalEngine | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const startingRecorderRef = useRef(false);
+  const browserRecognitionRef = useRef<BrowserRecognition | null>(null);
+  const nativeRecognitionFailedRef = useRef(false);
   const recordingTimerRef = useRef<number | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const speechPipelineRef = useRef<LocalPipeline | null>(null);
@@ -205,7 +218,80 @@ export default function LocalTutorPage() {
     return visionPipelineRef.current;
   }
 
+  function startBrowserSpeechRecognition(): boolean {
+    const speechWindow = window as Window & {
+      SpeechRecognition?: new () => BrowserRecognition;
+      webkitSpeechRecognition?: new () => BrowserRecognition;
+    };
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!Recognition) return false;
+
+    try {
+      const recognition = new Recognition();
+      let finalTranscript = "";
+      let failed = false;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+      recognition.onresult = event => {
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const result = event.results[index];
+          if (result.isFinal) finalTranscript += result[0]?.transcript || "";
+        }
+        if (finalTranscript.trim()) setStatus("I heard you. Courant is preparing your reply…");
+      };
+      recognition.onerror = event => {
+        if (event.error === "aborted" || event.error === "no-speech") return;
+        failed = true;
+        nativeRecognitionFailedRef.current = true;
+        setStatus(event.error === "not-allowed" || event.error === "service-not-allowed"
+          ? "Phone speech permission was blocked. Switching to microphone recording — check your browser's microphone permission if prompted."
+          : "Live speech recognition is unavailable. Switching to the local speech recogniser…");
+      };
+      recognition.onend = async () => {
+        if (browserRecognitionRef.current === recognition) browserRecognitionRef.current = null;
+        setListening(false);
+        if (!voiceCallRef.current || micMutedRef.current) return;
+        if (failed) {
+          window.setTimeout(() => {
+            if (voiceCallRef.current && !micMutedRef.current) void startListening();
+          }, 300);
+          return;
+        }
+        const spoken = finalTranscript.trim();
+        if (spoken.length >= 2) {
+          setTranscribing(true);
+          try {
+            await processMessage(spoken);
+          } finally {
+            setTranscribing(false);
+          }
+        }
+        if (voiceCallRef.current && !micMutedRef.current) {
+          window.setTimeout(() => {
+            if (voiceCallRef.current && !micMutedRef.current && !loading) void startListening();
+          }, spoken.length >= 2 ? 250 : 500);
+        }
+      };
+      browserRecognitionRef.current = recognition;
+      recognition.start();
+      setListening(true);
+      setStatus("Listening through your phone. Speak naturally — Courant will reply when you finish.");
+      return true;
+    } catch {
+      browserRecognitionRef.current = null;
+      nativeRecognitionFailedRef.current = true;
+      return false;
+    }
+  }
+
   async function startListening() {
+    if (voiceCallRef.current && !micMutedRef.current && !nativeRecognitionFailedRef.current) {
+      if (browserRecognitionRef.current) return;
+      if (startBrowserSpeechRecognition()) return;
+      // Unsupported browsers use the existing on-device Whisper recorder below.
+      nativeRecognitionFailedRef.current = true;
+    }
     // Guard the async permission request too: two callers must never open two
     // recorders while getUserMedia is still resolving.
     if (startingRecorderRef.current || micMutedRef.current) return;
@@ -628,6 +714,8 @@ CONVERSATION RULES:
       micMutedRef.current = false;
       setMicMuted(false);
       discardRecordingRef.current = recorderRef.current?.state === "recording";
+      browserRecognitionRef.current?.abort();
+      browserRecognitionRef.current = null;
       stopInterruptionMonitor();
       window.speechSynthesis.cancel();
       if (recorderRef.current?.state === "recording") recorderRef.current.stop();
@@ -650,6 +738,7 @@ CONVERSATION RULES:
       if (!ready) await ensureModel();
       micMutedRef.current = false;
       setMicMuted(false);
+      nativeRecognitionFailedRef.current = false;
       voiceCallRef.current = true;
       setVoiceCall(true);
       setStatus("Tutor ready. Starting your private lesson…");
@@ -670,12 +759,14 @@ CONVERSATION RULES:
     setMicMuted(nextMuted);
     if (micTrackRef.current) micTrackRef.current.enabled = !nextMuted;
     if (nextMuted) {
+      browserRecognitionRef.current?.abort();
+      browserRecognitionRef.current = null;
       stopInterruptionMonitor();
       setStatus("Microphone muted. Your teacher can finish speaking; unmute when you're ready.");
     } else {
       setStatus("Microphone on. Speak naturally when your teacher finishes.");
       if (voiceCallRef.current && window.speechSynthesis?.speaking) void watchForInterruption();
-      else if (voiceCallRef.current && recorderRef.current?.state !== "recording" && !transcribing && !loading) void startListening();
+      else if (voiceCallRef.current && !transcribing && !loading) void startListening();
     }
   }
 
