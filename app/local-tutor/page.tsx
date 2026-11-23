@@ -164,35 +164,34 @@ export default function LocalTutorPage() {
       setProgress(Math.round(Math.max(0, Math.min(1, report.progress ?? 0)) * 100));
       setStatus(report.text || "Downloading model weights…");
     };
-    let engine;
-    try {
-      // The 3B instruction-tuned model gives the tutor substantially more
-      // capacity for context, corrections and natural dialogue than the old 1.5B.
-      engine = await webllm.CreateMLCEngine("Qwen2.5-3B-Instruct-q4f16_1-MLC", {
-        initProgressCallback: onProgress,
-      });
-      setStatus("Loaded the upgraded 3B tutor — running privately on this device.");
-    } catch (upgradeError) {
-      // Keep the tutor usable on lower-memory GPUs and older supported devices.
-      setProgress(0);
-      setStatus("This device could not load the larger model. Trying the lighter tutor…");
+    let engine: unknown;
+    const isPhoneOrTablet = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+    const modelCandidates = isPhoneOrTablet
+      ? [
+          ["Qwen2.5-0.5B-Instruct-q4f16_1-MLC", "lightweight 0.5B"],
+          ["Qwen2.5-1.5B-Instruct-q4f16_1-MLC", "1.5B"],
+          ["Qwen2.5-3B-Instruct-q4f16_1-MLC", "3B"],
+        ]
+      : [
+          ["Qwen2.5-3B-Instruct-q4f16_1-MLC", "upgraded 3B"],
+          ["Qwen2.5-1.5B-Instruct-q4f16_1-MLC", "1.5B"],
+          ["Qwen2.5-0.5B-Instruct-q4f16_1-MLC", "lightweight 0.5B"],
+        ];
+    let lastModelError: unknown;
+    for (const [modelId, label] of modelCandidates) {
       try {
-        engine = await webllm.CreateMLCEngine("Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
-          initProgressCallback: onProgress,
-        });
-        setStatus("Loaded the compatible 1.5B tutor on this device.");
-      } catch {
         setProgress(0);
-        setStatus("This device has limited graphics memory. Trying the lightweight 0.5B tutor…");
-        try {
-          engine = await webllm.CreateMLCEngine("Qwen2.5-0.5B-Instruct-q4f16_1-MLC", {
-            initProgressCallback: onProgress,
-          });
-          setStatus("Loaded the lightweight 0.5B tutor on this device.");
-        } catch {
-          throw upgradeError;
-        }
+        setStatus(`Loading the ${label} tutor for this device…`);
+        engine = await webllm.CreateMLCEngine(modelId, { initProgressCallback: onProgress });
+        setStatus(`Loaded the ${label} tutor — running privately on this device.`);
+        break;
+      } catch (error) {
+        lastModelError = error;
       }
+    }
+    if (!engine) {
+      const detail = lastModelError instanceof Error ? lastModelError.message : "No supported model could be loaded.";
+      throw new Error(`Courant could not load its on-device language model on this phone. Try a recent Chrome browser with WebGPU enabled. ${detail}`);
     }
     engineRef.current = engine as LocalEngine;
     setReady(true);
