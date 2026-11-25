@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const text = typeof parsed.value.text === "string" ? parsed.value.text.trim().slice(0, 2500) : "";
     if (text.length < 2) return NextResponse.json({ error: "Please provide a little more text to speak." }, { status: 400, headers: noStore });
 
-    const model = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
+    const model = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-tts";
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
