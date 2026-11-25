@@ -79,6 +79,7 @@ export default function LocalTutorPage() {
   const liveMicStreamRef = useRef<MediaStream | null>(null);
   const liveProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const liveMuteGainRef = useRef<GainNode | null>(null);
+  const liveVideoTimerRef = useRef<number | null>(null);
   const liveNextPlayTimeRef = useRef(0);
   const liveUserTextRef = useRef("");
   const liveTeacherTextRef = useRef("");
@@ -127,8 +128,36 @@ export default function LocalTutorPage() {
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
+  function stopLiveVideoFrames() {
+    if (liveVideoTimerRef.current !== null) {
+      window.clearInterval(liveVideoTimerRef.current);
+      liveVideoTimerRef.current = null;
+    }
+  }
+
+  function startLiveVideoFrames() {
+    stopLiveVideoFrames();
+    const socket = liveSocketRef.current;
+    const video = videoRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !video || !streamRef.current) return;
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    liveVideoTimerRef.current = window.setInterval(() => {
+      if (socket.readyState !== WebSocket.OPEN || !streamRef.current || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) return;
+      const width = Math.min(video.videoWidth, 640);
+      const height = Math.max(1, Math.round(width * video.videoHeight / video.videoWidth));
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(video, 0, 0, width, height);
+      const jpeg = canvas.toDataURL("image/jpeg", 0.58).split(",")[1];
+      if (jpeg) socket.send(JSON.stringify({ realtimeInput: { video: { mimeType: "image/jpeg", data: jpeg } } }));
+    }, 1000);
+  }
+
   async function toggleCamera() {
     if (cameraOn) {
+      stopLiveVideoFrames();
       streamRef.current?.getTracks().forEach(track => track.stop());
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
@@ -148,9 +177,13 @@ export default function LocalTutorPage() {
         await videoRef.current.play().catch(() => undefined);
       }
       setCameraOn(true);
-      setCameraStatus("Your camera preview stays on this device. Capture a frame when you want Courant to describe it locally.");
+      setCameraStatus(voiceCallRef.current
+        ? "Camera is shared with Courant Live as one low-resolution frame per second. Turn it off any time."
+        : "Camera preview is ready. Start a live call to share frames with Courant, or capture one for a lesson.");
+      if (voiceCallRef.current) startLiveVideoFrames();
       stream.getVideoTracks().forEach(track => {
         track.onended = () => {
+          stopLiveVideoFrames();
           setCameraOn(false);
           setCameraStatus("Camera preview stopped.");
           streamRef.current = null;
@@ -787,6 +820,7 @@ CONVERSATION RULES:
     const socket = liveSocketRef.current;
     liveSocketRef.current = null;
     if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Call ended");
+    stopLiveVideoFrames();
     liveProcessorRef.current?.disconnect();
     liveProcessorRef.current = null;
     liveMuteGainRef.current?.disconnect();
@@ -846,7 +880,7 @@ CONVERSATION RULES:
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
       body: JSON.stringify({
-        mode: "voice",
+        mode: cameraOn ? "video" : "voice",
         level,
         scenario: lessonMode === "roleplay" ? "A natural role-play conversation. " + lessonGoal : lessonGoal,
       }),
@@ -1018,6 +1052,7 @@ CONVERSATION RULES:
         realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: encodePcmBase64(samples) } },
       }));
     };
+    if (cameraOn && streamRef.current) startLiveVideoFrames();
   }
 
   async function toggleVoiceCall() {
