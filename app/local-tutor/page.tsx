@@ -74,6 +74,14 @@ export default function LocalTutorPage() {
   const micMutedRef = useRef(false);
   const discardRecordingRef = useRef(false);
   const startingCallRef = useRef(false);
+  const liveSocketRef = useRef<WebSocket | null>(null);
+  const liveAudioContextRef = useRef<AudioContext | null>(null);
+  const liveMicStreamRef = useRef<MediaStream | null>(null);
+  const liveProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const liveMuteGainRef = useRef<GainNode | null>(null);
+  const liveNextPlayTimeRef = useRef(0);
+  const liveUserTextRef = useRef("");
+  const liveTeacherTextRef = useRef("");
 
   useEffect(() => {
     try {
@@ -775,10 +783,248 @@ CONVERSATION RULES:
   }
 
 
+  function stopGeminiLiveCall() {
+    const socket = liveSocketRef.current;
+    liveSocketRef.current = null;
+    if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Call ended");
+    liveProcessorRef.current?.disconnect();
+    liveProcessorRef.current = null;
+    liveMuteGainRef.current?.disconnect();
+    liveMuteGainRef.current = null;
+    liveMicStreamRef.current?.getTracks().forEach(track => track.stop());
+    liveMicStreamRef.current = null;
+    const context = liveAudioContextRef.current;
+    liveAudioContextRef.current = null;
+    if (context && context.state !== "closed") void context.close().catch(() => undefined);
+    liveNextPlayTimeRef.current = 0;
+    liveUserTextRef.current = "";
+    liveTeacherTextRef.current = "";
+    setListening(false);
+    setSpeaking(false);
+  }
+
+  function encodePcmBase64(samples: Float32Array) {
+    const pcm = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i += 1) {
+      const sample = Math.max(-1, Math.min(1, samples[i]));
+      pcm[i] = sample < 0 ? sample * 32768 : sample * 32767;
+    }
+    const bytes = new Uint8Array(pcm.buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+
+  function resampleAudio(input: Float32Array, inputRate: number, outputRate: number) {
+    if (inputRate === outputRate) return input;
+    const ratio = inputRate / outputRate;
+    const output = new Float32Array(Math.floor(input.length / ratio));
+    for (let i = 0; i < output.length; i += 1) {
+      const position = i * ratio;
+      const left = Math.floor(position);
+      const right = Math.min(left + 1, input.length - 1);
+      const fraction = position - left;
+      output[i] = input[left] * (1 - fraction) + input[right] * fraction;
+    }
+    return output;
+  }
+
+  async function startGeminiLiveCall() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.WebSocket) {
+      throw new Error("Live voice calls need a recent browser with microphone and WebSocket support. Please use Chrome or Safari and allow microphone access.");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+    });
+    liveMicStreamRef.current = stream;
+    const audioContext = new AudioContext();
+    liveAudioContextRef.current = audioContext;
+    await audioContext.resume();
+
+    const tokenResponse = await fetch("/api/tutor/realtime-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        mode: "voice",
+        level,
+        scenario: lessonMode === "roleplay" ? "A natural role-play conversation. " + lessonGoal : lessonGoal,
+      }),
+    });
+    const tokenPayload = await tokenResponse.json().catch(() => ({})) as {
+      clientSecret?: string; model?: string; config?: Record<string, unknown>; error?: string;
+    };
+    if (!tokenResponse.ok || !tokenPayload.clientSecret || !tokenPayload.model || !tokenPayload.config) {
+      throw new Error(tokenPayload.error || "Courant's cloud voice is not configured. Add GEMINI_API_KEY to the Render service environment to enable live calls.");
+    }
+
+    const socketUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=" + encodeURIComponent(tokenPayload.clientSecret);
+    const socket = new WebSocket(socketUrl);
+    liveSocketRef.current = socket;
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const timeout = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error("The live voice connection timed out. Please try again."));
+        socket.close();
+      }, 18000);
+      socket.onopen = () => {
+        socket.send(JSON.stringify({
+          setup: { model: "models/" + tokenPayload.model, ...tokenPayload.config },
+        }));
+      };
+      socket.onerror = () => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timeout);
+          reject(new Error("Could not connect to the cloud voice service. Check the Gemini API key and Live API access."));
+        }
+      };
+      socket.onclose = event => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timeout);
+          reject(new Error(event.reason || "The cloud voice connection closed before setup completed."));
+        } else if (voiceCallRef.current) {
+          setStatus("Cloud voice disconnected. End the call and reconnect.");
+          setListening(false);
+          setSpeaking(false);
+        }
+      };
+      socket.onmessage = async event => {
+        try {
+          const raw = typeof event.data === "string" ? event.data : await (event.data as Blob).text();
+          const message = JSON.parse(raw) as {
+            setupComplete?: unknown;
+            inputTranscription?: { text?: string };
+            outputTranscription?: { text?: string };
+            serverContent?: {
+              inputTranscription?: { text?: string };
+              outputTranscription?: { text?: string };
+              modelTurn?: { parts?: Array<{ text?: string; inlineData?: { data?: string; mimeType?: string } }> };
+              interrupted?: boolean;
+              turnComplete?: boolean;
+            };
+          };
+          if (message.setupComplete && !settled) {
+            settled = true;
+            window.clearTimeout(timeout);
+            resolve();
+            socket.send(JSON.stringify({
+              clientContent: {
+                turns: [{ role: "user", parts: [{ text: "Begin our one-to-one English lesson. Greet me warmly, introduce a small speaking goal, and ask one simple opening question. Speak directly to me." }] }],
+                turnComplete: true,
+              },
+            }));
+            setStatus("Connected to Courant Live. Speak naturally; you can interrupt your teacher.");
+            setListening(true);
+          }
+          const inputText = message.inputTranscription?.text || message.serverContent?.inputTranscription?.text;
+          if (inputText) {
+            liveUserTextRef.current = (liveUserTextRef.current + " " + inputText).trim().slice(-1800);
+          }
+          const outputText = message.outputTranscription?.text || message.serverContent?.outputTranscription?.text;
+          if (outputText) {
+            liveTeacherTextRef.current = (liveTeacherTextRef.current + " " + outputText).trim().slice(-1800);
+            const partial = liveTeacherTextRef.current;
+            setLines(current => {
+              const next = [...current];
+              const last = next[next.length - 1];
+              if (last?.role === "teacher") next[next.length - 1] = { role: "teacher", text: partial };
+              else next.push({ role: "teacher", text: partial });
+              return next;
+            });
+            setSpeaking(true);
+          }
+          const parts = message.serverContent?.modelTurn?.parts || [];
+          for (const part of parts) {
+            if (part.text) {
+              liveTeacherTextRef.current = (liveTeacherTextRef.current + " " + part.text).trim().slice(-1800);
+            }
+            const encoded = part.inlineData?.data;
+            if (encoded && liveAudioContextRef.current) {
+              const binary = atob(encoded);
+              const pcmBytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i += 1) pcmBytes[i] = binary.charCodeAt(i);
+              const pcm = new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, Math.floor(pcmBytes.byteLength / 2));
+              const context = liveAudioContextRef.current;
+              const audioBuffer = context.createBuffer(1, pcm.length, 24000);
+              const channel = audioBuffer.getChannelData(0);
+              for (let i = 0; i < pcm.length; i += 1) channel[i] = pcm[i] / 32768;
+              const source = context.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(context.destination);
+              const startAt = Math.max(context.currentTime + 0.02, liveNextPlayTimeRef.current);
+              source.start(startAt);
+              liveNextPlayTimeRef.current = startAt + audioBuffer.duration;
+              setSpeaking(true);
+              source.onended = () => {
+                if (liveAudioContextRef.current && liveAudioContextRef.current.currentTime >= liveNextPlayTimeRef.current - 0.04) setSpeaking(false);
+              };
+            }
+          }
+          if (message.serverContent?.interrupted) {
+            liveNextPlayTimeRef.current = liveAudioContextRef.current?.currentTime || 0;
+            setSpeaking(false);
+          }
+          if (message.serverContent?.turnComplete) {
+            const userText = liveUserTextRef.current;
+            const teacherText = liveTeacherTextRef.current;
+            if (userText) {
+              setLines(current => {
+                const next = [...current];
+                const last = next[next.length - 1];
+                if (last?.role === "you") next[next.length - 1] = { role: "you", text: userText };
+                else next.push({ role: "you", text: userText });
+                return next;
+              });
+              liveUserTextRef.current = "";
+            }
+            if (teacherText) {
+              setLines(current => {
+                const next = [...current];
+                const last = next[next.length - 1];
+                if (last?.role === "teacher") next[next.length - 1] = { role: "teacher", text: teacherText };
+                else next.push({ role: "teacher", text: teacherText });
+                return next;
+              });
+              liveTeacherTextRef.current = "";
+            }
+            setSpeaking(false);
+            setListening(true);
+            setStatus("Your turn — I'm listening.");
+          }
+        } catch {
+          setStatus("The live tutor sent an unreadable response. Please reconnect.");
+        }
+      };
+    });
+
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    const muteGain = audioContext.createGain();
+    muteGain.gain.value = 0;
+    source.connect(processor);
+    processor.connect(muteGain);
+    muteGain.connect(audioContext.destination);
+    liveProcessorRef.current = processor;
+    liveMuteGainRef.current = muteGain;
+    processor.onaudioprocess = event => {
+      if (micMutedRef.current || socket.readyState !== WebSocket.OPEN) return;
+      const samples = resampleAudio(event.inputBuffer.getChannelData(0), audioContext.sampleRate, 16000);
+      if (!samples.length) return;
+      socket.send(JSON.stringify({
+        realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: encodePcmBase64(samples) } },
+      }));
+    };
+  }
+
   async function toggleVoiceCall() {
     if (voiceCallRef.current) {
       voiceCallRef.current = false;
       setVoiceCall(false);
+      stopGeminiLiveCall();
       micMutedRef.current = false;
       setMicMuted(false);
       discardRecordingRef.current = recorderRef.current?.state === "recording";
@@ -802,21 +1048,17 @@ CONVERSATION RULES:
         window.speechSynthesis.speak(unlock);
         window.speechSynthesis.cancel();
       }
-      setStatus("Connecting your English tutor…");
-      // Do not block call startup on downloading/initialising a multi-gigabyte
-      // local model. The server tutor answers first; local inference is fallback.
+      setStatus("Connecting to Courant Live…");
       micMutedRef.current = false;
       setMicMuted(false);
-      nativeRecognitionFailedRef.current = false;
       voiceCallRef.current = true;
       setVoiceCall(true);
-      setStatus("Tutor ready. Starting your private lesson…");
-      await processMessage("Start our one-to-one English lesson. Greet me naturally, introduce today's small speaking goal, and ask me one simple opening question. Speak directly to me as my teacher.");
-      if (voiceCallRef.current && !micMutedRef.current) await startListening();
+      await startGeminiLiveCall();
     } catch (cause) {
       voiceCallRef.current = false;
       setVoiceCall(false);
-      setStatus(cause instanceof Error ? cause.message : "Could not start the local voice call.");
+      stopGeminiLiveCall();
+      setStatus(cause instanceof Error ? cause.message : "Could not start the cloud voice call.");
     } finally {
       startingCallRef.current = false;
     }
@@ -827,6 +1069,7 @@ CONVERSATION RULES:
     micMutedRef.current = nextMuted;
     setMicMuted(nextMuted);
     if (micTrackRef.current) micTrackRef.current.enabled = !nextMuted;
+    if (liveMicStreamRef.current) liveMicStreamRef.current.getAudioTracks().forEach(track => { track.enabled = !nextMuted; });
     if (nextMuted) {
       browserRecognitionRef.current?.abort();
       browserRecognitionRef.current = null;
@@ -876,13 +1119,13 @@ CONVERSATION RULES:
         <header style={{ margin: "40px 0 28px" }}>
           <p style={{ color: "#6b725d", letterSpacing: ".12em", textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>Private practice · on-device AI</p>
           <h1 style={{ fontSize: "clamp(34px, 6vw, 54px)", letterSpacing: "-.045em", lineHeight: 1.05, fontWeight: 600, margin: "12px 0" }}>Your own English teacher, one lesson at a time.</h1>
-          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Have a private one-to-one English lesson with a tutor that guides the conversation, adapts to your level, corrects useful mistakes and follows your learning goal. Speak naturally in a hands-free, turn-by-turn voice call, or type whenever you prefer.</p>
+          <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Have a private one-to-one English lesson with a live cloud voice tutor. Speak naturally, hear spoken replies, and interrupt the teacher just like a real conversation. Text practice remains available too.</p>
         </header>
 
         <section style={{ background: "#fff", border: "1px solid #e8e7df", borderRadius: 20, padding: 22, marginBottom: 18 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ minWidth: 220, flex: 1 }}>
-              <strong style={{ display: "block", marginBottom: 5 }}>On-device tutor · Qwen2.5 3B</strong>
+              <strong style={{ display: "block", marginBottom: 5 }}>Courant Live · cloud voice tutor</strong>
               <span role="status" style={{ color: "#72746c", fontSize: 13 }}>{status}</span>
             </div>
             <button type="button" onClick={() => { setLoading(true); ensureModel().catch(error => setStatus(error instanceof Error ? error.message : "Could not load model.")).finally(() => setLoading(false)); }} disabled={loading || ready} style={{ border: 0, borderRadius: 999, background: "#343b2d", color: "white", padding: "12px 18px", cursor: "pointer", opacity: loading || ready ? .6 : 1 }}>{ready ? "Model ready" : loading ? "Loading…" : "Prepare tutor"}</button>
@@ -955,8 +1198,8 @@ CONVERSATION RULES:
         <section style={{ background: "#fff", border: "1px solid #e8e7df", borderRadius: 20, overflow: "hidden" }}>
           <div aria-live="polite" style={{ minHeight: 280, maxHeight: "50vh", overflowY: "auto", padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
             {lines.length === 0 && <div style={{ margin: "auto", maxWidth: 420, textAlign: "center", padding: "40px 0" }}><div aria-hidden="true" style={{ fontSize: 28, marginBottom: 10 }}>✳</div><h2 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 8px" }}>What would you like to practise?</h2><p style={{ color: "#77796f", lineHeight: 1.6, margin: 0 }}>Start with “I want to speak more confidently. Can we talk about my day?”</p></div>}
-            {lines.map((line, index) => <div key={index} style={{ alignSelf: line.role === "you" ? "flex-end" : "flex-start", maxWidth: "88%", borderRadius: 16, padding: "12px 15px", background: line.role === "you" ? "#e9eddf" : "#f5f4ef", lineHeight: 1.65, whiteSpace: "pre-wrap" }}><div style={{ fontSize: 11, color: "#77796f", marginBottom: 4 }}>{line.role === "you" ? "YOU" : "COURANT · LOCAL TUTOR"}</div>{line.text}</div>)}
-            {loading && <p style={{ color: "#77796f", fontSize: 14 }}>Thinking on your device…</p>}
+            {lines.map((line, index) => <div key={index} style={{ alignSelf: line.role === "you" ? "flex-end" : "flex-start", maxWidth: "88%", borderRadius: 16, padding: "12px 15px", background: line.role === "you" ? "#e9eddf" : "#f5f4ef", lineHeight: 1.65, whiteSpace: "pre-wrap" }}><div style={{ fontSize: 11, color: "#77796f", marginBottom: 4 }}>{line.role === "you" ? "YOU" : "COURANT · LIVE TUTOR"}</div>{line.text}</div>)}
+            {loading && <p style={{ color: "#77796f", fontSize: 14 }}>Courant is thinking…</p>}
           </div>
           {lines.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, padding: "14px 18px 0" }}>
             <button type="button" onClick={startNewLesson} disabled={loading || reviewLoading} style={{ border: "1px solid #deded5", borderRadius: 999, padding: "9px 14px", background: "#fff", color: "#55584f", fontSize: 12, cursor: "pointer" }}>Start a new lesson</button>
@@ -965,7 +1208,7 @@ CONVERSATION RULES:
           {lessonReview && <section aria-live="polite" style={{ margin: "14px 18px", padding: 18, borderRadius: 14, background: "#f4f5ef", border: "1px solid #e2e7dc" }}><h3 style={{ fontSize: 16, fontWeight: 650, margin: "0 0 10px" }}>Your lesson review</h3><p style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.7, color: "#44483f", margin: 0 }}>{lessonReview}</p></section>}
           <div style={{ borderTop: "1px solid #eeede6", padding: "14px 14px 0", display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button type="button" onClick={() => void toggleVoiceCall()} disabled={transcribing || (loading && !voiceCall)} style={{ flex: "1 1 180px", minHeight: 48, border: 0, borderRadius: 12, padding: "0 18px", background: voiceCall ? "#8c5148" : "#343b2d", color: "white", cursor: "pointer", fontWeight: 650 }}>{voiceCall ? "End voice call" : "Start 1:1 voice call"}</button>
-            <span style={{ alignSelf: "center", color: "#77796f", fontSize: 12 }}>{voiceCall ? (listening ? "Listening for your turn" : speaking ? "Courant is speaking" : "Preparing next turn") : "Hands-free, turn-by-turn conversation"}</span>
+            <span style={{ alignSelf: "center", color: "#77796f", fontSize: 12 }}>{voiceCall ? (listening ? "Listening for your turn" : speaking ? "Courant is speaking" : "Preparing next turn") : "Live two-way audio · natural interruptions"}</span>
           </div>
           <form onSubmit={sendMessage} style={{ borderTop: "1px solid #eeede6", padding: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
             <input value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Tell your teacher what you would like to talk about…" aria-label="Message to the local English tutor" style={{ minWidth: 0, flex: "1 1 220px", border: "1px solid #e2e1d9", borderRadius: 12, padding: "14px 15px", background: "#fff", color: "#252722", font: "inherit" }} />
@@ -980,7 +1223,7 @@ CONVERSATION RULES:
             <button type="button" onClick={() => { setSelectedImage(""); setSelectedImageName(""); }} style={{ border: 0, background: "transparent", fontSize: 12, textDecoration: "underline", cursor: "pointer" }}>Remove</button>
           </div>}
         </section>
-        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Your tutor follows recent turns in this lesson. If you opt in, recent lesson text and your latest review stay in this browser. Phone browser speech recognition is used when available and may process audio through that browser's speech service; otherwise Courant falls back to on-device Whisper. The language model and picture captioning run on your device. Raw recordings and pictures are not saved. Spoken replies use your device voices.</p>
+        <p style={{ marginTop: 16, fontSize: 12, color: "#77796f", lineHeight: 1.6 }}>Live voice uses Google's Gemini Live cloud service. Audio is streamed to Google to generate real-time spoken replies; it is not stored by Courant. A Gemini API key must be configured privately as GEMINI_API_KEY in the Render service environment. Text and picture practice may use the local model.</p>
       </div>
       {voiceCall && <div role="dialog" aria-modal="true" aria-label="Courant one-to-one voice lesson" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "radial-gradient(ellipse at 50% 28%, #39483f 0%, #202923 58%, #151c18 100%)", color: "#f4f5ef", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "max(28px, env(safe-area-inset-top)) 22px max(26px, env(safe-area-inset-bottom))", overflowY: "auto" }}>
         <div style={{ width: "100%", maxWidth: 720, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1027,7 +1270,7 @@ CONVERSATION RULES:
           <button type="button" onClick={() => void toggleVoiceCall()} style={{ width: 68, height: 68, borderRadius: "50%", border: 0, background: "#b9574d", color: "white", fontSize: 25, cursor: "pointer" }} aria-label="End voice call">☎</button>
           <button type="button" onClick={() => void toggleCamera()} style={{ width: 52, height: 52, borderRadius: "50%", border: "1px solid #718073", background: cameraOn ? "#60785f" : "#344238", color: "white", fontSize: 20, cursor: "pointer" }} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>▣</button>
         </div>
-        <div style={{ fontSize: 11, color: "#9eac9d", textAlign: "center", maxWidth: 520 }}>Speak naturally between turns. Use the microphone button to mute or unmute. Headphones help prevent speaker echo. Speech recognition and the language model run on this device; replies are generated turn by turn.</div>
+        <div style={{ fontSize: 11, color: "#9eac9d", textAlign: "center", maxWidth: 520 }}>Speak naturally and interrupt Courant whenever you need. Use the microphone button to mute or unmute. Headphones help prevent echo. Audio is streamed securely to the cloud tutor.</div>
       </div>}
     </main>
   );
