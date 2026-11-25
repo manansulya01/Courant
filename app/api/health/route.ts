@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     console.error("Courant health check: rate-limit unavailable", error instanceof Error ? error.name : "UnknownError");
   }
   const aiConfigured = Boolean(process.env.GEMINI_API_KEY);
-  const ready = database === "ok" && authConfigured && rateLimitConfigured && rateLimitRpc === "ok";
+  const ready = database === "ok" && authConfigured && rateLimitConfigured && rateLimitRpc === "ok" && aiConfigured;
   return NextResponse.json({
     status: ready ? "ok" : "degraded",
     checks: { database, authConfigured, rateLimitConfigured, rateLimitRpc, aiConfigured },
