@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     }
     const instructions = `${coachInstructions}\n\nLEARNER LEVEL: ${level}. ${levelGuidance[level]}\nCALL MODE: ${mode}. CONVERSATION CONTEXT: ${scenario || "a friendly everyday English conversation"}.${learnerHint}`;
     const now = Date.now();
-    const model = process.env.GEMINI_LIVE_MODEL || "gemini-3.1-flash-live-preview";
+    const model = process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live";
     const liveConfig = {
       generationConfig: {
         responseModalities: ["AUDIO"],

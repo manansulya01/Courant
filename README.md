@@ -62,4 +62,14 @@ Password recovery is enabled when `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verif
 
 ## Deploying to Render
 
-A starter Render Blueprint is provided in `render.yaml`. In Render, create a Blueprint from this GitHub repository and deploy the `main` branch after configuring the prompted secrets (`MONGODB_URI`, `AUTH_SECRET`, `GEMINI_API_KEY`, and the canonical HTTPS `APP_URL`). Add optional `RESEND_*` settings for password-recovery email and `LIVEAVATAR_*` settings for animated AI-teacher video. Configure MongoDB Atlas Network Access to allow the Render service to connect using a restricted, appropriate network policy; do not publish database credentials or open access broadly as a permanent fix. After deployment, verify the health endpoint and complete the production smoke checklist above.
+A starter Render Blueprint is provided in `render.yaml`. Connect this GitHub repository in Render and deploy the `main` branch after setting the prompted server-only values:
+
+- `GEMINI_API_KEY` — required for the cloud tutor, speech generation, transcription, and Gemini Live calls. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
+- `COURANT_RATE_LIMIT_SECRET` — required for the shared PostgreSQL rate-limit RPC.
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — the Supabase project URL and browser-safe publishable key. Database access is protected by Supabase Auth and row-level security.
+
+The Blueprint supplies model defaults: `GEMINI_TEXT_MODEL=gemini-2.5-flash`, `GEMINI_LIVE_MODEL=gemini-3.8-live`, `GEMINI_TTS_MODEL=gemini-3.8-flash-tts`, and `GEMINI_TRANSCRIPTION_MODEL=gemini-2.5-flash`. Override them only with model IDs enabled for your Google AI Studio project. Optional `LIVEAVATAR_*` settings enable a streamed avatar provider; the local animated teacher remains available without it.
+
+After deployment, verify `/api/health` returns HTTP 200 and reports the database, Auth, rate-limit RPC, and Gemini key as configured. Then test text tutoring, TTS playback, recorded-audio transcription, and a real Gemini Live call from a supported HTTPS browser. A successful health response confirms required configuration is present; it does not replace a real audio/video end-to-end test.
+
+During a live call, the learner can optionally enable their camera. Courant sends a reduced-resolution JPEG frame once per second to Gemini Live while the call is active; the camera is not enabled automatically. Camera and microphone access require explicit browser permission. The local animated avatar is a lightweight fallback, not a photorealistic generated video; LiveAvatar is an optional separately configured provider.
