@@ -42,7 +42,7 @@ export default function LocalTutorPage() {
   const [selectedImage, setSelectedImage] = useState("");
   const [selectedImageName, setSelectedImageName] = useState("");
   const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState("The local model has not been downloaded yet.");
+  const [status, setStatus] = useState("Cloud voice is ready. Start a call to connect.");
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [level, setLevel] = useState("intermediate");
   const [lessonMode, setLessonMode] = useState("conversation");
@@ -923,6 +923,14 @@ CONVERSATION RULES:
           const inputText = message.inputTranscription?.text || message.serverContent?.inputTranscription?.text;
           if (inputText) {
             liveUserTextRef.current = (liveUserTextRef.current + " " + inputText).trim().slice(-1800);
+            const partialUserText = liveUserTextRef.current;
+            setLines(current => {
+              const next = [...current];
+              const last = next[next.length - 1];
+              if (last?.role === "you") next[next.length - 1] = { role: "you", text: partialUserText };
+              else next.push({ role: "you", text: partialUserText });
+              return next;
+            });
           }
           const outputText = message.outputTranscription?.text || message.serverContent?.outputTranscription?.text;
           if (outputText) {
@@ -949,7 +957,7 @@ CONVERSATION RULES:
               for (let i = 0; i < binary.length; i += 1) pcmBytes[i] = binary.charCodeAt(i);
               const pcm = new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, Math.floor(pcmBytes.byteLength / 2));
               const context = liveAudioContextRef.current;
-              const audioBuffer = context.createBuffer(1, pcm.length, 24000);
+              const outputRate = Number(part.inlineData?.mimeType?.match(/rate=(\\d+)/)?.[1] || 24000);\n              const audioBuffer = context.createBuffer(1, pcm.length, outputRate);
               const channel = audioBuffer.getChannelData(0);
               for (let i = 0; i < pcm.length; i += 1) channel[i] = pcm[i] / 32768;
               const source = context.createBufferSource();
@@ -971,16 +979,7 @@ CONVERSATION RULES:
           if (message.serverContent?.turnComplete) {
             const userText = liveUserTextRef.current;
             const teacherText = liveTeacherTextRef.current;
-            if (userText) {
-              setLines(current => {
-                const next = [...current];
-                const last = next[next.length - 1];
-                if (last?.role === "you") next[next.length - 1] = { role: "you", text: userText };
-                else next.push({ role: "you", text: userText });
-                return next;
-              });
-              liveUserTextRef.current = "";
-            }
+            if (userText) liveUserTextRef.current = "";
             if (teacherText) {
               setLines(current => {
                 const next = [...current];
@@ -1117,7 +1116,7 @@ CONVERSATION RULES:
       <div style={{ maxWidth: 820, margin: "0 auto" }}>
         <a href="/" style={{ color: "#676a60", textDecoration: "none", fontSize: 14 }}>← Courant</a>
         <header style={{ margin: "40px 0 28px" }}>
-          <p style={{ color: "#6b725d", letterSpacing: ".12em", textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>Private practice · on-device AI</p>
+          <p style={{ color: "#6b725d", letterSpacing: ".12em", textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>Private practice · live cloud tutor</p>
           <h1 style={{ fontSize: "clamp(34px, 6vw, 54px)", letterSpacing: "-.045em", lineHeight: 1.05, fontWeight: 600, margin: "12px 0" }}>Your own English teacher, one lesson at a time.</h1>
           <p style={{ color: "#66695f", lineHeight: 1.7, maxWidth: 620 }}>Have a private one-to-one English lesson with a live cloud voice tutor. Speak naturally, hear spoken replies, and interrupt the teacher just like a real conversation. Text practice remains available too.</p>
         </header>
