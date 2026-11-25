@@ -957,7 +957,8 @@ CONVERSATION RULES:
               for (let i = 0; i < binary.length; i += 1) pcmBytes[i] = binary.charCodeAt(i);
               const pcm = new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, Math.floor(pcmBytes.byteLength / 2));
               const context = liveAudioContextRef.current;
-              const outputRate = Number(part.inlineData?.mimeType?.match(/rate=(\\d+)/)?.[1] || 24000);\n              const audioBuffer = context.createBuffer(1, pcm.length, outputRate);
+              const outputRate = Number(part.inlineData?.mimeType?.match(/rate=(\d+)/)?.[1] || 24000);
+              const audioBuffer = context.createBuffer(1, pcm.length, outputRate);
               const channel = audioBuffer.getChannelData(0);
               for (let i = 0; i < pcm.length; i += 1) channel[i] = pcm[i] / 32768;
               const source = context.createBufferSource();
