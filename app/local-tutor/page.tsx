@@ -125,6 +125,10 @@ export default function LocalTutorPage() {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     if (interruptMonitorRef.current) { cancelAnimationFrame(interruptMonitorRef.current.frame); interruptMonitorRef.current.stream.getTracks().forEach(track => track.stop()); void interruptMonitorRef.current.context.close(); interruptMonitorRef.current = null; }
     streamRef.current?.getTracks().forEach(track => track.stop());
+    if (liveVideoTimerRef.current !== null) window.clearInterval(liveVideoTimerRef.current);
+    liveSocketRef.current?.close(1000, "Page closed");
+    liveMicStreamRef.current?.getTracks().forEach(track => track.stop());
+    if (liveAudioContextRef.current && liveAudioContextRef.current.state !== "closed") void liveAudioContextRef.current.close().catch(() => undefined);
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
