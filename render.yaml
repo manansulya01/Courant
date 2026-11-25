@@ -17,8 +17,6 @@ services:
         value: "sb_publishable_UvQThB27XraXwE59CpUbmQ_qdTaZpPv"
       - key: COURANT_RATE_LIMIT_SECRET
         sync: false
-      - key: GEMINI_TEXT_MODEL
-        value: gemini-2.5-flash
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_TEXT_MODEL
